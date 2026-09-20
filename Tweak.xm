@@ -208,9 +208,15 @@ static void MTTryDashboardLaunchYouTube(void){
     if(![gDashboardEnv respondsToSelector:launch]){MTLog(@"[LAUNCH] selector missing");return;}
     gDidLaunchYT=YES;
     @try{
-        MTLog(@"[LAUNCH] invoking Dashboard launch appInfo=%@ sceneID=%@",gYTAppInfo,
+        MTLog(@"[LAUNCH] preparing Dashboard launch appInfo=%@ sceneID=%@",gYTAppInfo,
               ((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,NSSelectorFromString(@"sceneIdentifierForAppInfo:"),gYTAppInfo));
-        ((void(*)(id,SEL,id,id))objc_msgSend)(gDashboardEnv,launch,gYTAppInfo,nil);
+        Class li=NSClassFromString(@"DBApplicationLaunchInfo");
+        SEL initLI=NSSelectorFromString(@"initWithApplication:activationSettings:");
+        if(!li || ![li instancesRespondToSelector:initLI]) { MTLog(@"[LAUNCH] launchInfo class/init missing"); gDidLaunchYT=NO; return; }
+        NSDictionary *activation=@{@"DBActivationSettingLaunchSource":@"MiniTa"};
+        id launchInfo=((id(*)(id,SEL,id,id))objc_msgSend)([li alloc],initLI,gYTAppInfo,activation);
+        MTLog(@"[LAUNCH] launchInfo=%@ application=%@ settings=%@",launchInfo,MTV(launchInfo,@"application"),MTV(launchInfo,@"activationSettings"));
+        ((void(*)(id,SEL,id,id))objc_msgSend)(gDashboardEnv,launch,launchInfo,nil);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
             id scene=nil;
             @try{scene=((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,NSSelectorFromString(@"sceneForAppInfo:"),gYTAppInfo);}@catch(__unused NSException*e){}
