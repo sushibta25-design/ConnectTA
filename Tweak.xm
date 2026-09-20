@@ -196,7 +196,7 @@ static void MTTryBuildYouTubeAppInfo(void){
 }
 static void MTProbeControllerEnvironment(id controller, NSString *sid){
     if(!controller)return;
-    id env=MTV(controller,@"environment"); if(env && [NSStringFromClass([env class]) isEqualToString:@"DBDashboard"]) gDashboardEnv=env;
+    id env=MTV(controller,@"environment"); if(env && [NSStringFromClass([env class]) isEqualToString:@"DBDashboard"]) { gDashboardEnv=env; gMTHybridDashboard=env; MTLog(@"[HYBRID-DASH] captured live dashboard=%@",env); }
     id realScene=MTV(controller,@"scene");
     id realSettings=MTV(realScene,@"settings");
     id dc=MTV(realSettings,@"displayConfiguration");
@@ -698,6 +698,7 @@ static void __attribute__((unused)) MTHybridRequestYouTubeLaunch(void){
         }else MTLog(@"[HYBRID-LAUNCH] dashboard launch selector missing");
     }@catch(NSException *e){MTLog(@"[HYBRID-LAUNCH] ERROR %@ %@",e.name,e.reason);}
 }
+static __weak id gMTHybridDashboard=nil;
 static __weak id gMTHybridWorkspace=nil;
 static IMP mtOrigWorkspaceInit=nil;
 static id MTHybridWorkspaceInit(id self,SEL _cmd,id owner){
@@ -733,18 +734,7 @@ static void MTHybridRefreshRosterAndActivate(void){
             if(ai){MTLog(@"[HYBRID-ROSTER] built appInfo via %@ => %@",name,ai);break;}
         }
         if(!ai)return;
-        id dash=nil;
-        for(UIScene *sc in UIApplication.sharedApplication.connectedScenes){
-            if([sc isKindOfClass:UIWindowScene.class]&&[sc.session.persistentIdentifier containsString:@"DBDashboard-Car"]){
-                for(UIWindow *w in ((UIWindowScene*)sc).windows){
-                    id vc=w.rootViewController;
-                    // Walk common containment until an object exposes _launchAppWithInfo:forURL:.
-                    NSMutableArray *q=[NSMutableArray array];if(vc)[q addObject:vc];
-                    while(q.count){id x=q.firstObject;[q removeObjectAtIndex:0];if([x respondsToSelector:NSSelectorFromString(@"_launchAppWithInfo:forURL:")]){dash=x;break;}if([x respondsToSelector:@selector(childViewControllers)])[q addObjectsFromArray:[x childViewControllers]];}
-                    if(dash)break;
-                }
-            }if(dash)break;
-        }
+        id dash=gMTHybridDashboard;
         MTLog(@"[HYBRID-ROSTER] live launch owner=%@",dash);
         if(dash){
             SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
