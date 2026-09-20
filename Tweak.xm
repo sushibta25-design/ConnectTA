@@ -155,12 +155,32 @@ static void MTProbeApplicationProxy(void){
         free(m);
     }
 }
+static void MTTryBuildYouTubeAppInfo(void){
+    Class lp=NSClassFromString(@"LSApplicationProxy"), di=NSClassFromString(@"DBApplicationInfo");
+    if(!lp||!di){MTLog(@"[BUILD] classes missing proxy=%@ info=%@",lp,di);return;}
+    SEL ps=NSSelectorFromString(@"applicationProxyForIdentifier:");
+    if(![lp respondsToSelector:ps]){MTLog(@"[BUILD] proxy factory missing");return;}
+    id proxy=nil,info=nil;
+    @try{
+        proxy=((id(*)(id,SEL,id))objc_msgSend)(lp,ps,@"com.google.ios.youtube");
+        MTLog(@"[BUILD] proxy=%@ class=%@",proxy,NSStringFromClass([proxy class]));
+        if(!proxy)return;
+        SEL init=NSSelectorFromString(@"initWithApplicationProxy:");
+        info=((id(*)(id,SEL,id))objc_msgSend)([di alloc],init,proxy);
+        MTLog(@"[BUILD] appInfo=%@ class=%@ valid=%@ name=%@ declaration=%@",info,NSStringFromClass([info class]),MTV(info,@"isValid"),MTV(info,@"displayName"),MTV(info,@"carPlayDeclaration"));
+        if(!info)return;
+        if([info respondsToSelector:NSSelectorFromString(@"setCBFake:")])((void(*)(id,SEL,BOOL))objc_msgSend)(info,NSSelectorFromString(@"setCBFake:"),YES);
+        if([info respondsToSelector:NSSelectorFromString(@"setCBBridged:")])((void(*)(id,SEL,BOOL))objc_msgSend)(info,NSSelectorFromString(@"setCBBridged:"),YES);
+        MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
+    }@catch(NSException*e){MTLog(@"[BUILD] ERROR %@ %@",e.name,e.reason);}
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
     MTProbeDBApplicationInfo();
     MTProbeFBSApplicationInfo();
     MTProbeApplicationProxy();
+    MTTryBuildYouTubeAppInfo();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
     id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
     if(!svc)return;
