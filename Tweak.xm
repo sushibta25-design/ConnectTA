@@ -732,22 +732,34 @@ static void MTHybridActivateViaWorkspace(void){
 }
 static void MTHybridActivateViaWorkspace(void);
 static void MTHybridRefreshRosterAndActivate(void){
-    Class cc=NSClassFromString(@"DBApplicationController");
-    id ctl=(cc&&[cc respondsToSelector:NSSelectorFromString(@"sharedInstance")])?((id(*)(id,SEL))objc_msgSend)(cc,NSSelectorFromString(@"sharedInstance")):nil;
-    if(!ctl){MTLog(@"[HYBRID-ROSTER] controller missing");return;}
-    MTLog(@"[HYBRID-ROSTER] controller=%@",ctl);
-    unsigned int mc=0;Method *ms=class_copyMethodList([ctl class],&mc);
-    for(unsigned int i=0;i<mc;i++){
-        NSString *n=NSStringFromSelector(method_getName(ms[i]));NSString *l=n.lowercaseString;
-        if([l containsString:@"application"]||[l containsString:@"reload"]||[l containsString:@"refresh"]||[l containsString:@"update"])
-            MTLog(@"[HYBRID-ROSTER-METHOD] -%@ types=%s",n,method_getTypeEncoding(ms[i]));
-    }free(ms);
-    // Prefer the same live refresh family used by the dashboard, if present.
-    for(NSString *name in @[@"reloadApplications",@"refreshApplications",@"_reloadApplications",@"_refreshApplications",@"updateApplications"]){
+    Class car=NSClassFromString(@"CARApplication");
+    MTLog(@"[HYBRID-ROSTER] CARApplication=%@",car);
+    if(!car)return;
+    NSArray *apps=nil;
+    for(NSString *name in @[@"_allInstalledApplications",@"allInstalledApplications"]){
         SEL sel=NSSelectorFromString(name);
-        if([ctl respondsToSelector:sel]){@try{MTLog(@"[HYBRID-ROSTER] invoking %@",name);((void(*)(id,SEL))objc_msgSend)(ctl,sel);}@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] %@ error %@",name,e.reason);}break;}
+        if([car respondsToSelector:sel]){@try{apps=((id(*)(id,SEL))objc_msgSend)(car,sel);MTLog(@"[HYBRID-ROSTER] %@ count=%lu",name,(unsigned long)apps.count);}@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] %@ error %@",name,e.reason);}if(apps)break;}
     }
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.8*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHybridActivateViaWorkspace();});
+    id yt=nil;
+    for(id a in apps){
+        NSString *b=MTV(a,@"bundleIdentifier");if(!b)b=MTV(a,@"_bundleIdentifier");
+        if([b isEqualToString:@"com.google.ios.youtube"]){yt=a;break;}
+    }
+    MTLog(@"[HYBRID-ROSTER] youtube=%@",yt);
+    if(!yt){
+        unsigned int mc=0;Method *ms=class_copyMethodList(object_getClass(car),&mc);
+        for(unsigned int i=0;i<mc;i++){NSString*n=NSStringFromSelector(method_getName(ms[i]));NSString*l=n.lowercaseString;if([l containsString:@"installed"]||[l containsString:@"application"])MTLog(@"[HYBRID-ROSTER-METHOD] +%@ types=%s",n,method_getTypeEncoding(ms[i]));}free(ms);
+        return;
+    }
+    // If admitted into CARApplication, let the existing Dashboard launch path consume it.
+    id ws=gMTHybridWorkspace;
+    Class rc=NSClassFromString(@"DBMutableWorkspaceStateChangeRequest");id req=rc?[rc new]:nil;
+    SEL activate=NSSelectorFromString(@"activateApplication:"),change=NSSelectorFromString(@"requestStateChange:");
+    if(ws&&req&&[req respondsToSelector:activate]&&[ws respondsToSelector:change]){
+        ((void(*)(id,SEL,id))objc_msgSend)(req,activate,yt);
+        MTLog(@"[HYBRID-WS] requesting CARApplication activation");
+        ((void(*)(id,SEL,id))objc_msgSend)(ws,change,req);
+    }
 }
 #pragma mark - MiniTa hybrid bridge (DuoPhone host + CarSurf-style role bridge)
 
