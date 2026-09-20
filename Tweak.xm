@@ -111,10 +111,37 @@ static void MTProbeDBApplicationInfo(void){
     for(unsigned int i=0;i<mc;i++)MTLog(@"[APPINFO-METHOD] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
     free(m);
 }
+static void MTProbeFBSApplicationInfo(void){
+    Class c=NSClassFromString(@"FBSApplicationInfo");
+    if(!c){MTLog(@"[FBSAPPINFO] class missing");return;}
+    MTLog(@"[FBSAPPINFO] class present superclass=%@",NSStringFromClass(class_getSuperclass(c)));
+    unsigned int mc=0;Method *m=class_copyMethodList(c,&mc);
+    for(unsigned int i=0;i<mc;i++){
+        NSString *sn=NSStringFromSelector(method_getName(m[i]));
+        if([sn localizedCaseInsensitiveContainsString:@"bundle"]||
+           [sn localizedCaseInsensitiveContainsString:@"proxy"]||
+           [sn localizedCaseInsensitiveContainsString:@"init"]||
+           [sn localizedCaseInsensitiveContainsString:@"application"]||
+           [sn localizedCaseInsensitiveContainsString:@"identifier"])
+            MTLog(@"[FBSAPPINFO-METHOD] -%@ types=%s",sn,method_getTypeEncoding(m[i]));
+    }
+    free(m);
+    Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
+    for(unsigned int i=0;i<mc;i++){
+        NSString *sn=NSStringFromSelector(method_getName(m[i]));
+        if([sn localizedCaseInsensitiveContainsString:@"bundle"]||
+           [sn localizedCaseInsensitiveContainsString:@"proxy"]||
+           [sn localizedCaseInsensitiveContainsString:@"application"]||
+           [sn localizedCaseInsensitiveContainsString:@"identifier"])
+            MTLog(@"[FBSAPPINFO-METHOD] +%@ types=%s",sn,method_getTypeEncoding(m[i]));
+    }
+    free(m);
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
     MTProbeDBApplicationInfo();
+    MTProbeFBSApplicationInfo();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
     id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
     if(!svc)return;
