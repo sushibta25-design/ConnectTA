@@ -757,7 +757,7 @@ static void MTHybridRefreshRosterAndActivate(void){
             SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
             if([dash respondsToSelector:pre])MTLog(@"[HYBRID-ROSTER] preflight=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(dash,pre,ai));
             static BOOL rosterDirectStarted=NO;
-            if(!rosterDirectStarted){rosterDirectStarted=YES;gYTAppInfo=ai;MTLog(@"[DIRECT-ROSTER] appInfo=%@ armed; delayed direct test",gYTAppInfo);dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(5.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTLog(@"[DIRECT-DELAY] firing once");MTTryCreateDirectYouTubeScene();});}
+            if(!rosterDirectStarted){rosterDirectStarted=YES;gYTAppInfo=ai;MTLog(@"[DIRECT-ROSTER] appInfo=%@ armed; 1.2s direct test",gYTAppInfo);dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.2*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTLog(@"[DIRECT-DELAY] firing once");MTTryCreateDirectYouTubeScene();});}
             MTLog(@"[HYBRID-ROSTER] DBApplicationInfo is not launchInfo; waiting to capture native launch contract. sample=%@",gMTHybridNativeLaunchArg);
         }
     }@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] ERROR %@ %@",e.name,e.reason);}
