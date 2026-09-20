@@ -908,6 +908,8 @@ static void MTHybridInstallAppBridge(void){
  NSString*sid=MTV((id)self,@"sceneID"); MTProbeControllerEnvironment((id)self,sid); NSString*b=MTBundleFromSID(sid);
  if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
    gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
+    static BOOL directRenderStarted=NO;
+    if(!directRenderStarted){directRenderStarted=YES;MTLog(@"[RENDER-DIRECT] starting YouTube client scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTTryCreateDirectYouTubeScene(); });}
     id env=gMTHybridDashboard; id ai=nil; @try{ai=((id(*)(id,SEL,id))objc_msgSend)(env,NSSelectorFromString(@"applicationInfoForScene:"),MTV((id)self,@"scene"));}@catch(__unused NSException*e){} MTLog(@"[FG-B] dashboard=%@ appInfoForScene=%@",env,ai);
     static int renderLogs=0; BOOL logRender=(renderLogs++<3); if(logRender) MTLog(@"[RENDER-B] sceneID=%@ controller=%@ appInfo=%@",sid,NSStringFromClass([(id)self class]),ai);
     id sc=MTV((id)self,@"scene"); id st=MTV(sc,@"settings"); id cp=MTV(sc,@"clientProcess");
