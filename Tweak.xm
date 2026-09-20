@@ -712,25 +712,7 @@ static void MTHybridInstallWorkspaceCapture(void){
     mtOrigWorkspaceInit=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridWorkspaceInit);
     MTLog(@"[HYBRID-WS] capture installed");
 }
-static void MTHybridActivateViaWorkspace(void){
-    id ws=gMTHybridWorkspace;if(!ws){MTLog(@"[HYBRID-WS] no workspace");return;}
-    Class cc=NSClassFromString(@"DBApplicationController");
-    id ctl=(cc&&[cc respondsToSelector:NSSelectorFromString(@"sharedInstance")])?((id(*)(id,SEL))objc_msgSend)(cc,NSSelectorFromString(@"sharedInstance")):nil;
-    id app=(ctl&&[ctl respondsToSelector:NSSelectorFromString(@"applicationWithBundleIdentifier:")])?((id(*)(id,SEL,id))objc_msgSend)(ctl,NSSelectorFromString(@"applicationWithBundleIdentifier:"),@"com.google.ios.youtube"):nil;
-    MTLog(@"[HYBRID-WS] roster application=%@",app);
-    if(!app)return;
-    Class rc=NSClassFromString(@"DBMutableWorkspaceStateChangeRequest");id req=rc?[rc new]:nil;
-    SEL activate=NSSelectorFromString(@"activateApplication:"),change=NSSelectorFromString(@"requestStateChange:");
-    if(req&&[req respondsToSelector:activate]&&[ws respondsToSelector:change]){
-        ((void(*)(id,SEL,id))objc_msgSend)(req,activate,app);
-        MTLog(@"[HYBRID-WS] requesting activation");
-        ((void(*)(id,SEL,id))objc_msgSend)(ws,change,req);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-            id state=MTV(ws,@"state");MTLog(@"[HYBRID-WS] active=%@",MTV(state,@"activeBundleIdentifier"));
-        });
-    }
-}
-static void MTHybridActivateViaWorkspace(void) __attribute__((unused));
+
 static void MTHybridRefreshRosterAndActivate(void){
     Class car=NSClassFromString(@"CARApplication");
     MTLog(@"[HYBRID-ROSTER] CARApplication=%@",car);
