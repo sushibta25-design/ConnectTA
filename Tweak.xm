@@ -757,7 +757,7 @@ static void MTHybridRefreshRosterAndActivate(void){
             SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
             if([dash respondsToSelector:pre])MTLog(@"[HYBRID-ROSTER] preflight=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(dash,pre,ai));
             static BOOL rosterDirectStarted=NO;
-            if(!rosterDirectStarted){rosterDirectStarted=YES;gYTAppInfo=ai;MTLog(@"[DIRECT-ROSTER] appInfo=%@ armed; waiting for user selection",gYTAppInfo);}
+            if(!rosterDirectStarted){rosterDirectStarted=YES;gYTAppInfo=ai;MTLog(@"[DIRECT-ROSTER] appInfo=%@ armed; delayed direct test",gYTAppInfo);dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(5.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTLog(@"[DIRECT-DELAY] firing once");MTTryCreateDirectYouTubeScene();});}
             MTLog(@"[HYBRID-ROSTER] DBApplicationInfo is not launchInfo; waiting to capture native launch contract. sample=%@",gMTHybridNativeLaunchArg);
         }
     }@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] ERROR %@ %@",e.name,e.reason);}
@@ -871,7 +871,7 @@ static void MTHybridInstallAppBridge(void){
 - (void)_handleOpenApplicationEvent:(id)event {
     MTLog(@"[HYBRID-OPEN] event=%@ class=%@",event,NSStringFromClass([event class]));
     static BOOL directSelectionFired=NO;
-    if(!directSelectionFired && gYTAppInfo){directSelectionFired=YES;MTLog(@"[DIRECT-SELECT] native open event received; creating armed YouTube direct scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.15*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryCreateDirectYouTubeScene();});}
+    if(NO && !directSelectionFired && gYTAppInfo){directSelectionFired=YES;MTLog(@"[DIRECT-SELECT] native open event received; creating armed YouTube direct scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.15*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryCreateDirectYouTubeScene();});}
     id ctx=MTV(event,@"context");
     if(!ctx){@try{ctx=[event valueForKey:@"_context"];}@catch(__unused NSException*e){}}
     if(ctx){
@@ -916,7 +916,7 @@ static void MTHybridInstallAppBridge(void){
  NSString*sid=MTV((id)self,@"sceneID"); MTProbeControllerEnvironment((id)self,sid); NSString*b=MTBundleFromSID(sid);
  if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
    gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
-    static BOOL directFromCapture=NO;if(!directFromCapture&&gYTAppInfo){directFromCapture=YES;MTLog(@"[DIRECT-SELECT] YouTube proxy capture received; creating armed direct scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.15*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryCreateDirectYouTubeScene();});}
+    static BOOL directFromCapture=NO;if(NO && !directFromCapture&&gYTAppInfo){directFromCapture=YES;MTLog(@"[DIRECT-SELECT] YouTube proxy capture received; creating armed direct scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.15*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryCreateDirectYouTubeScene();});}
     static BOOL directRenderStarted=NO;
     if(!directRenderStarted){directRenderStarted=YES;MTLog(@"[RENDER-DIRECT] starting YouTube client scene");Class px=NSClassFromString(@"LSApplicationProxy");Class ic=NSClassFromString(@"DBApplicationInfo");id pp=((id(*)(id,SEL,id))objc_msgSend)(px,NSSelectorFromString(@"applicationProxyForIdentifier:"),@"com.google.ios.youtube");if(pp&&ic)gYTAppInfo=((id(*)(id,SEL,id))objc_msgSend)([ic alloc],NSSelectorFromString(@"initWithApplicationProxy:"),pp);MTLog(@"[RENDER-DIRECT] refreshed appInfo=%@",gYTAppInfo);dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTTryCreateDirectYouTubeScene(); });}
     id env=gMTHybridDashboard; id ai=nil; @try{ai=((id(*)(id,SEL,id))objc_msgSend)(env,NSSelectorFromString(@"applicationInfoForScene:"),MTV((id)self,@"scene"));}@catch(__unused NSException*e){} MTLog(@"[FG-B] dashboard=%@ appInfoForScene=%@",env,ai);
