@@ -857,12 +857,23 @@ static void MTHybridInstallAppBridge(void){
     }
     static BOOL dumped=NO;if(!dumped){dumped=YES;
         unsigned int ic=0;Ivar *ivs=class_copyIvarList([event class],&ic);
-        for(unsigned int i=0;i<ic;i++){const char*n=ivar_getName(ivs[i]);const char*t=ivar_getTypeEncoding(ivs[i]);id v=nil;@try{v=object_getIvar(event,ivs[i]);}@catch(__unused NSException*e){}
-            MTLog(@"[HYBRID-EVENT-IVAR] %s type=%s value=%@ class=%@",n?:"?",t?:"?",v,NSStringFromClass([v class]));}free(ivs);
+        BOOL hasObjectPayload=NO, hasWritableTarget=NO;
+        for(unsigned int i=0;i<ic;i++){
+            const char*n=ivar_getName(ivs[i]);const char*t=ivar_getTypeEncoding(ivs[i]);id v=nil;
+            @try{if(t&&t[0]=='@')v=object_getIvar(event,ivs[i]);}@catch(__unused NSException*e){}
+            if(t&&t[0]=='@'&&v)hasObjectPayload=YES;
+            NSString *in=n?[NSString stringWithUTF8String:n]:@"";
+            NSString *il=in.lowercaseString;
+            if([il containsString:@"application"]||[il containsString:@"bundle"]||[il containsString:@"identifier"]||[il containsString:@"payload"]||[il containsString:@"info"])hasWritableTarget=YES;
+            MTLog(@"[HYBRID-EVENT-IVAR] %s type=%s value=%@ class=%@",n?:"?",t?:"?",v,NSStringFromClass([v class]));
+        }free(ivs);
         unsigned int mc=0;Method *ms=class_copyMethodList([event class],&mc);
         for(unsigned int i=0;i<mc;i++){NSString*n=NSStringFromSelector(method_getName(ms[i]));NSString*l=n.lowercaseString;
-            if([l containsString:@"application"]||[l containsString:@"bundle"]||[l containsString:@"payload"]||[l containsString:@"event"]||[l containsString:@"identifier"]||[l containsString:@"value"]||[l containsString:@"info"])
+            if([l containsString:@"application"]||[l containsString:@"bundle"]||[l containsString:@"payload"]||[l containsString:@"event"]||[l containsString:@"identifier"]||[l containsString:@"value"]||[l containsString:@"info"]||[l hasPrefix:@"set"])
                 MTLog(@"[HYBRID-EVENT-METHOD] -%@ types=%s",n,method_getTypeEncoding(ms[i]));}free(ms);
+        MTLog(@"[HYBRID-DUAL] A(native)=TRUE event continues unchanged");
+        MTLog(@"[HYBRID-DUAL] B(retarget-candidate)=%@ objectPayload=%d writableNameCandidate=%d",
+              (hasObjectPayload&&hasWritableTarget)?@"TRUE":@"FALSE",hasObjectPayload,hasWritableTarget);
     }
     %orig;
 }
