@@ -529,7 +529,7 @@ static void MTTryActivateDirectYouTubeScene(id scene){
                 MTLog(@"[DIRECTGO] mutation class=%@ display=%@ frame=%@",NSStringFromClass([mutableSettings class]),MTV(mutableSettings,@"displayConfiguration"),
                       NSStringFromCGRect(((CGRect(*)(id,SEL))objc_msgSend)(mutableSettings,NSSelectorFromString(@"frame"))));
             }@catch(NSException *e){MTLog(@"[DIRECTGO] mutation ERROR %@ %@",e.name,e.reason);}
-        }];
+        });
 
         SEL act=NSSelectorFromString(@"pb_activate:withCompletion:");
         if([scene respondsToSelector:act]){
