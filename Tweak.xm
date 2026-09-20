@@ -7,6 +7,7 @@ static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
+static void MTProbeDirectSceneInputs(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
 static void MTLog(NSString *fmt,...){va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
 static id MTV(id o,NSString*k){@try{return[o valueForKey:k];}@catch(__unused NSException*e){return nil;}}
@@ -177,6 +178,7 @@ static void MTTryBuildYouTubeAppInfo(void){
         gYTAppInfo=info;
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
         MTProbeRealYouTubeIdentity();
+        MTProbeDirectSceneInputs();
         MTValidateYouTubeInDashboard();
     }@catch(NSException*e){MTLog(@"[BUILD] ERROR %@ %@",e.name,e.reason);}
 }
@@ -331,6 +333,32 @@ static void MTProbeRealYouTubeIdentity(void){
                [sn localizedCaseInsensitiveContainsString:@"process"])
                 MTLog(@"[YTIDENT-METHOD] %@ +%@ types=%s",NSStringFromClass(c),sn,method_getTypeEncoding(m[i]));
         }
+        free(m);
+    }
+}
+static void MTProbeDirectSceneInputs(void){
+    if(!gYTAppInfo){MTLog(@"[DIRECT2] appInfo missing");return;}
+    id pid=MTV(gYTAppInfo,@"processIdentity");
+    MTLog(@"[DIRECT2] processIdentity=%@ class=%@",pid,NSStringFromClass([pid class]));
+    Class def=NSClassFromString(@"FBSSceneDefinition");
+    Class spec=NSClassFromString(@"UIApplicationStarkSceneSpecification");
+    if(def){
+        unsigned int mc=0;Method *m=class_copyMethodList(def,&mc);
+        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] -%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+        free(m);
+        Class meta=object_getClass(def);mc=0;m=class_copyMethodList(meta,&mc);
+        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+        free(m);
+    }
+    if(spec){
+        Class meta=object_getClass(spec);unsigned int mc=0;Method *m=class_copyMethodList(meta,&mc);
+        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-SPEC] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+        free(m);
+    }
+    Class mgr=NSClassFromString(@"FBSceneManager");
+    if(mgr){
+        Class meta=object_getClass(mgr);unsigned int mc=0;Method *m=class_copyMethodList(meta,&mc);
+        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-MGR] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
         free(m);
     }
 }
