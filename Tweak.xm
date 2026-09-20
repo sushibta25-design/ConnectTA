@@ -675,6 +675,28 @@ static void MTTryKnownCarPlayActivation(void){
     }
 }
 
+static void MTHybridRequestYouTubeLaunch(void){
+    Class proxy=NSClassFromString(@"LSApplicationProxy");
+    Class info=NSClassFromString(@"DBApplicationInfo");
+    if(!proxy||!info){MTLog(@"[HYBRID-LAUNCH] classes missing proxy=%@ info=%@",proxy,info);return;}
+    @try{
+        id p=((id(*)(id,SEL,id))objc_msgSend)(proxy,NSSelectorFromString(@"applicationProxyForIdentifier:"),@"com.google.ios.youtube");
+        id ai=((id(*)(id,SEL,id))objc_msgSend)([info alloc],NSSelectorFromString(@"initWithApplicationProxy:"),p);
+        if([ai respondsToSelector:NSSelectorFromString(@"setCBFake:")])((void(*)(id,SEL,BOOL))objc_msgSend)(ai,NSSelectorFromString(@"setCBFake:"),YES);
+        if([ai respondsToSelector:NSSelectorFromString(@"setCBBridged:")])((void(*)(id,SEL,BOOL))objc_msgSend)(ai,NSSelectorFromString(@"setCBBridged:"),YES);
+        MTLog(@"[HYBRID-LAUNCH] appInfo=%@ valid=%@ declaration=%@",ai,MTV(ai,@"isValid"),MTV(ai,@"carPlayDeclaration"));
+        Class app=NSClassFromString(@"UIApplication"); id shared=((id(*)(id,SEL))objc_msgSend)(app,@selector(sharedApplication));
+        id dash=MTV(shared,@"_currentDashboard");
+        if(!dash){MTLog(@"[HYBRID-LAUNCH] dashboard missing");return;}
+        SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
+        if([dash respondsToSelector:pre])MTLog(@"[HYBRID-LAUNCH] preflight=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(dash,pre,ai));
+        SEL launch=NSSelectorFromString(@"_launchAppWithInfo:forURL:");
+        if([dash respondsToSelector:launch]){
+            MTLog(@"[HYBRID-LAUNCH] invoking dashboard launch");
+            ((void(*)(id,SEL,id,id))objc_msgSend)(dash,launch,ai,nil);
+        }else MTLog(@"[HYBRID-LAUNCH] dashboard launch selector missing");
+    }@catch(NSException *e){MTLog(@"[HYBRID-LAUNCH] ERROR %@ %@",e.name,e.reason);}
+}
 #pragma mark - MiniTa hybrid bridge (DuoPhone host + CarSurf-style role bridge)
 
 static BOOL MTHybridIsYTProxy(id proxy){
@@ -791,5 +813,5 @@ static void MTHybridInstallAppBridge(void){
     [[NSFileManager defaultManager]removeItemAtPath:MTLogPath error:nil];
     MTLog(@"=== MINITA HYBRID CARPLAY === bundle=%@ process=%@",bundle,NSProcessInfo.processInfo.processName);
     MTHybridInstallAdmission();
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryKnownCarPlayActivation();});
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(3.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTHybridRequestYouTubeLaunch(); });
 }}
