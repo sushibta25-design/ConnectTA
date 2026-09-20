@@ -2,7 +2,7 @@ name: Build MiniTa Probe
 on:
   workflow_dispatch:
   push:
-    branches: [ main, test-launchinfo-A, test-event-B ]
+    branches: [ main, test-launchinfo-A, test-event-B, test-foreground-A, test-foreground-B ]
 jobs:
   build:
     runs-on: macos-14
