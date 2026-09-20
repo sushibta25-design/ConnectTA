@@ -21,7 +21,7 @@ static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil;
 static void MTLog(NSString *fmt,...){
     static unsigned long long written=0;
     if(!fmt || written>131072) return;
-    if([fmt hasPrefix:@"[ENV]"] || [fmt hasPrefix:@"[ACT-METHOD]"] ||
+    if([fmt hasPrefix:@"[CAPTURE]"] || [fmt hasPrefix:@"[HOST]"] || [fmt hasPrefix:@"[ENV]"] || [fmt hasPrefix:@"[ACT-METHOD]"] ||
        [fmt hasPrefix:@"[HYBRID-DASH]"] || [fmt hasPrefix:@"[DIRECTGO]"] ||
        [fmt hasPrefix:@"[DASH] waiting"] || [fmt hasPrefix:@"[FG-B]"]) return;
     va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);
@@ -909,7 +909,7 @@ static void MTHybridInstallAppBridge(void){
  if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
    gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
     static BOOL directRenderStarted=NO;
-    if(!directRenderStarted){directRenderStarted=YES;MTLog(@"[RENDER-DIRECT] starting YouTube client scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTTryCreateDirectYouTubeScene(); });}
+    if(!directRenderStarted){directRenderStarted=YES;MTLog(@"[RENDER-DIRECT] starting YouTube client scene");Class px=NSClassFromString(@"LSApplicationProxy");Class ic=NSClassFromString(@"DBApplicationInfo");id pp=((id(*)(id,SEL,id))objc_msgSend)(px,NSSelectorFromString(@"applicationProxyForIdentifier:"),@"com.google.ios.youtube");if(pp&&ic)gYTAppInfo=((id(*)(id,SEL,id))objc_msgSend)([ic alloc],NSSelectorFromString(@"initWithApplicationProxy:"),pp);MTLog(@"[RENDER-DIRECT] refreshed appInfo=%@",gYTAppInfo);dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTTryCreateDirectYouTubeScene(); });}
     id env=gMTHybridDashboard; id ai=nil; @try{ai=((id(*)(id,SEL,id))objc_msgSend)(env,NSSelectorFromString(@"applicationInfoForScene:"),MTV((id)self,@"scene"));}@catch(__unused NSException*e){} MTLog(@"[FG-B] dashboard=%@ appInfoForScene=%@",env,ai);
     static int renderLogs=0; BOOL logRender=(renderLogs++<3); if(logRender) MTLog(@"[RENDER-B] sceneID=%@ controller=%@ appInfo=%@",sid,NSStringFromClass([(id)self class]),ai);
     id sc=MTV((id)self,@"scene"); id st=MTV(sc,@"settings"); id cp=MTV(sc,@"clientProcess");
