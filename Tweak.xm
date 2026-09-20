@@ -21,7 +21,7 @@ static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil;
 static void MTLog(NSString *fmt,...){
     static unsigned long long written=0;
     if(!fmt || written>131072) return;
-    if([fmt hasPrefix:@"[CAPTURE]"] || [fmt hasPrefix:@"[HOST]"] || [fmt hasPrefix:@"[ENV]"] || [fmt hasPrefix:@"[ACT-METHOD]"] ||
+    if([fmt hasPrefix:@"[DIRECTACT-METHOD]"] || [fmt hasPrefix:@"[CAPTURE]"] || [fmt hasPrefix:@"[HOST]"] || [fmt hasPrefix:@"[ENV]"] || [fmt hasPrefix:@"[ACT-METHOD]"] ||
        [fmt hasPrefix:@"[HYBRID-DASH]"] || [fmt hasPrefix:@"[DIRECTGO]"] ||
        [fmt hasPrefix:@"[DASH] waiting"] || [fmt hasPrefix:@"[FG-B]"]) return;
     va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);
@@ -557,7 +557,7 @@ static void MTTryActivateDirectYouTubeScene(id scene){
         });
 
         SEL act=NSSelectorFromString(@"pb_activate:withCompletion:");
-        if(NO && [scene respondsToSelector:act]){
+        if([scene respondsToSelector:act]){
             MTLog(@"[DIRECTGO] pb_activate");
             void (^cfg)(id)=^(id mutableSettings){
                 @try{
