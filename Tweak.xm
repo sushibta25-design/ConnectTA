@@ -881,7 +881,7 @@ static void MTHybridInstallAppBridge(void){
             MTLog(@"[HYBRID-EVENT-IVAR] %s type=%s value=%@ class=%@",n?:"?",t?:"?",v,NSStringFromClass([v class]));
         }free(ivs);
         unsigned int mc=0;Method *ms=class_copyMethodList([event class],&mc);
-        for(unsigned int i=0;i<mc;i++){NSString*n=NSStringFromSelector(method_getName(ms[i]));NSString*l=n.lowercaseString;
+        static BOOL loggedMethods=NO;if(loggedMethods){free(ms);mc=0;}else loggedMethods=YES; for(unsigned int i=0;i<mc;i++){NSString*n=NSStringFromSelector(method_getName(ms[i]));NSString*l=n.lowercaseString;
             if([l containsString:@"application"]||[l containsString:@"bundle"]||[l containsString:@"payload"]||[l containsString:@"event"]||[l containsString:@"identifier"]||[l containsString:@"value"]||[l containsString:@"info"]||[l hasPrefix:@"set"])
                 MTLog(@"[HYBRID-EVENT-METHOD] -%@ types=%s",n,method_getTypeEncoding(ms[i]));}free(ms);
         MTLog(@"[HYBRID-DUAL] A(native)=TRUE event continues unchanged");
@@ -897,11 +897,11 @@ static void MTHybridInstallAppBridge(void){
  if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
    gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
     id env=gMTHybridDashboard; id ai=nil; @try{ai=((id(*)(id,SEL,id))objc_msgSend)(env,NSSelectorFromString(@"applicationInfoForScene:"),MTV((id)self,@"scene"));}@catch(__unused NSException*e){} MTLog(@"[FG-B] dashboard=%@ appInfoForScene=%@",env,ai);
-    MTLog(@"[RENDER-B] sceneID=%@ controller=%@ appInfo=%@",sid,NSStringFromClass([(id)self class]),ai);
+    static int renderLogs=0; BOOL logRender=(renderLogs++<3); if(logRender) MTLog(@"[RENDER-B] sceneID=%@ controller=%@ appInfo=%@",sid,NSStringFromClass([(id)self class]),ai);
     id sc=MTV((id)self,@"scene"); id st=MTV(sc,@"settings"); id cp=MTV(sc,@"clientProcess");
-    MTLog(@"[RENDER-B] scene=%@ clientProcess=%@ settings=%@",sc,cp,st);
+    if(logRender) MTLog(@"[RENDER-B] scene=%@ clientProcess=%@ settings=%@",sc,cp,st);
     id pv=nil; @try{pv=((id(*)(id,SEL,id))objc_msgSend)((id)self,NSSelectorFromString(@"presentationViewWithIdentifier:"),@"com.sushibta.minita.youtube");}@catch(NSException*e){MTLog(@"[RENDER-B] presentation error=%@",e.reason);}
-    MTLog(@"[RENDER-B] presentation=%@ class=%@ window=%@ subviews=%lu",pv,NSStringFromClass([pv class]),[pv window],(unsigned long)[pv subviews].count); dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.25*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTHostYouTube(); });
+    if(logRender) MTLog(@"[RENDER-B] presentation=%@ class=%@ window=%@ subviews=%lu",pv,NSStringFromClass([pv class]),[pv window],(unsigned long)[pv subviews].count); dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.25*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTHostYouTube(); });
    static BOOL mtDidDumpScene=NO; if(!mtDidDumpScene){mtDidDumpScene=YES;dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTDumpSceneInternals((id)self);});}
    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHostYouTube();});
  }
