@@ -1,8 +1,8 @@
-Package: com.sushibta.minita.probe
-Name: MiniTa Probe
-Version: 0.1.0
+Package: com.sushibta.minita
+Name: MiniTa
+Version: 0.2.0
 Architecture: iphoneos-arm64
-Description: YouTube external display and scene probe for MiniTa.
+Description: MiniTa Phase 2 YouTube scene capture and CarPlay host experiment.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks
