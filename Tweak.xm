@@ -81,7 +81,7 @@ static void MTProbeDBSceneController(void){
            [name localizedCaseInsensitiveContainsString:@"service"]||
            [name localizedCaseInsensitiveContainsString:@"application"]||
            [name localizedCaseInsensitiveContainsString:@"process"])
-            MTLog(@"[DB-IVAR] %@ type=%s",name,t?:@"");
+            MTLog(@"[DB-IVAR] %@ type=%s",name,t?t:"");
     }
     free(ivars);
     unsigned int pc=0;objc_property_t *props=class_copyPropertyList(c,&pc);
