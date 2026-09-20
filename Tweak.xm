@@ -4,7 +4,7 @@
 #import <objc/runtime.h>
 
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
-static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil;
+static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil; static id gDirectYTScene=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
 static void MTProbeValidClientIdentity(void);
@@ -420,7 +420,7 @@ static void MTBuildDirectDefinitionProbe(void){
               MTV(spec,@"settingsClass"),MTV(spec,@"clientSettingsClass"));
     }@catch(NSException *e){MTLog(@"[DIRECTDEF] ERROR %@ %@",e.name,e.reason);}
 }
-static BOOL gDidCreateDirectYT=NO; static id gDirectYTScene=nil;
+static BOOL gDidCreateDirectYT=NO;
 static void MTTryCreateDirectYouTubeScene(void){
     if(gDidCreateDirectYT||!gYTAppInfo)return;
     id proc=MTV(gYTAppInfo,@"processIdentity");
@@ -518,7 +518,7 @@ static void MTTryActivateDirectYouTubeScene(id scene){
               @(((BOOL(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"isForeground"))));
         if(!gCarDisplayConfig){MTLog(@"[DIRECTGO] waiting for CarPlay displayConfiguration");return;}
 
-        [scene updateSettingsWithBlock:^(id mutableSettings){
+        ((void(*)(id,SEL,id))objc_msgSend)(scene,NSSelectorFromString(@"updateSettingsWithBlock:"),^(id mutableSettings){
             @try{
                 SEL sd=NSSelectorFromString(@"setDisplayConfiguration:");
                 SEL sf=NSSelectorFromString(@"setFrame:");
