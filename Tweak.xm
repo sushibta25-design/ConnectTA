@@ -730,6 +730,25 @@ static void MTHybridActivateViaWorkspace(void){
         });
     }
 }
+static void MTHybridActivateViaWorkspace(void);
+static void MTHybridRefreshRosterAndActivate(void){
+    Class cc=NSClassFromString(@"DBApplicationController");
+    id ctl=(cc&&[cc respondsToSelector:NSSelectorFromString(@"sharedInstance")])?((id(*)(id,SEL))objc_msgSend)(cc,NSSelectorFromString(@"sharedInstance")):nil;
+    if(!ctl){MTLog(@"[HYBRID-ROSTER] controller missing");return;}
+    MTLog(@"[HYBRID-ROSTER] controller=%@",ctl);
+    unsigned int mc=0;Method *ms=class_copyMethodList([ctl class],&mc);
+    for(unsigned int i=0;i<mc;i++){
+        NSString *n=NSStringFromSelector(method_getName(ms[i]));NSString *l=n.lowercaseString;
+        if([l containsString:@"application"]||[l containsString:@"reload"]||[l containsString:@"refresh"]||[l containsString:@"update"])
+            MTLog(@"[HYBRID-ROSTER-METHOD] -%@ types=%s",n,method_getTypeEncoding(ms[i]));
+    }free(ms);
+    // Prefer the same live refresh family used by the dashboard, if present.
+    for(NSString *name in @[@"reloadApplications",@"refreshApplications",@"_reloadApplications",@"_refreshApplications",@"updateApplications"]){
+        SEL sel=NSSelectorFromString(name);
+        if([ctl respondsToSelector:sel]){@try{MTLog(@"[HYBRID-ROSTER] invoking %@",name);((void(*)(id,SEL))objc_msgSend)(ctl,sel);}@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] %@ error %@",name,e.reason);}break;}
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.8*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHybridActivateViaWorkspace();});
+}
 #pragma mark - MiniTa hybrid bridge (DuoPhone host + CarSurf-style role bridge)
 
 static BOOL MTHybridIsYTProxy(id proxy){
@@ -828,7 +847,7 @@ static void MTHybridInstallAppBridge(void){
 - (void)_handleCarPlayUIReady {
     %orig;
     static BOOL once=NO;if(once)return;once=YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHybridActivateViaWorkspace();});
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHybridRefreshRosterAndActivate();});
 }
 %end
 %hook DBApplicationSceneViewController
