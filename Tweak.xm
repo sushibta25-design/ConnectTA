@@ -4,13 +4,14 @@
 #import <objc/runtime.h>
 
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
-static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil;
+static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
 static void MTProbeValidClientIdentity(void);
 static void MTBuildDirectDefinitionProbe(void);
 static void MTTryCreateDirectYouTubeScene(void);
 static void MTProbeDirectSceneActivation(id scene);
+static void MTTryActivateDirectYouTubeScene(id scene);
 static void MTProbeDirectSceneObjects(void);
 static void MTProbeDirectSceneInputs(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
@@ -194,6 +195,11 @@ static void MTTryBuildYouTubeAppInfo(void){
 static void MTProbeControllerEnvironment(id controller, NSString *sid){
     if(!controller)return;
     id env=MTV(controller,@"environment"); if(env && [NSStringFromClass([env class]) isEqualToString:@"DBDashboard"]) gDashboardEnv=env;
+    id realScene=MTV(controller,@"scene");
+    id realSettings=MTV(realScene,@"settings");
+    id dc=MTV(realSettings,@"displayConfiguration");
+    if(dc) gCarDisplayConfig=dc;
+    if(gDirectYTScene && gCarDisplayConfig && !MTV(gDirectYTScene,@"clientProcess")) MTTryActivateDirectYouTubeScene(gDirectYTScene);
     id req=MTV(controller,@"requester");
     MTLog(@"[ENV] sid=%@ controller=%@ environment=%@ envClass=%@ requester=%@ requesterClass=%@",
           sid,NSStringFromClass([controller class]),env,NSStringFromClass([env class]),req,NSStringFromClass([req class]));
@@ -414,7 +420,7 @@ static void MTBuildDirectDefinitionProbe(void){
               MTV(spec,@"settingsClass"),MTV(spec,@"clientSettingsClass"));
     }@catch(NSException *e){MTLog(@"[DIRECTDEF] ERROR %@ %@",e.name,e.reason);}
 }
-static BOOL gDidCreateDirectYT=NO;
+static BOOL gDidCreateDirectYT=NO; static id gDirectYTScene=nil;
 static void MTTryCreateDirectYouTubeScene(void){
     if(gDidCreateDirectYT||!gYTAppInfo)return;
     id proc=MTV(gYTAppInfo,@"processIdentity");
@@ -439,8 +445,10 @@ static void MTTryCreateDirectYouTubeScene(void){
         id mgr=((id(*)(id,SEL))objc_msgSend)(mc,NSSelectorFromString(@"sharedInstance"));
         gDidCreateDirectYT=YES;
         id scene=((id(*)(id,SEL,id))objc_msgSend)(mgr,NSSelectorFromString(@"createSceneWithDefinition:"),def);
+        gDirectYTScene=scene;
         MTLog(@"[DIRECTCREATE] returned scene=%@ class=%@",scene,NSStringFromClass([scene class]));
         MTProbeDirectSceneActivation(scene);
+        MTTryActivateDirectYouTubeScene(scene);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
             id again=((id(*)(id,SEL,id))objc_msgSend)(mgr,NSSelectorFromString(@"sceneWithIdentifier:"),sid);
             MTLog(@"[DIRECTCREATE] after scene=%@ clientProcess=%@ definition=%@",again,MTV(again,@"clientProcess"),MTV(again,@"definition"));
@@ -499,6 +507,52 @@ static void MTProbeDirectSceneActivation(id scene){
                 MTLog(@"[DIRECTACT-METHOD] %@ -%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
         }free(m);
     }
+}
+static void MTTryActivateDirectYouTubeScene(id scene){
+    if(!scene)return;
+    @try{
+        id settings=MTV(scene,@"settings");
+        MTLog(@"[DIRECTGO] before process=%@ display=%@ frame=%@ foreground=%@",
+              MTV(scene,@"clientProcess"),MTV(settings,@"displayConfiguration"),
+              NSStringFromCGRect(((CGRect(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"frame"))),
+              @(((BOOL(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"isForeground"))));
+        if(!gCarDisplayConfig){MTLog(@"[DIRECTGO] waiting for CarPlay displayConfiguration");return;}
+
+        [scene updateSettingsWithBlock:^(id mutableSettings){
+            @try{
+                SEL sd=NSSelectorFromString(@"setDisplayConfiguration:");
+                SEL sf=NSSelectorFromString(@"setFrame:");
+                SEL sfg=NSSelectorFromString(@"setForeground:");
+                if([mutableSettings respondsToSelector:sd]) ((void(*)(id,SEL,id))objc_msgSend)(mutableSettings,sd,gCarDisplayConfig);
+                if([mutableSettings respondsToSelector:sf]) ((void(*)(id,SEL,CGRect))objc_msgSend)(mutableSettings,sf,CGRectMake(0,0,426.66666666666663,240));
+                if([mutableSettings respondsToSelector:sfg]) ((void(*)(id,SEL,BOOL))objc_msgSend)(mutableSettings,sfg,YES);
+                MTLog(@"[DIRECTGO] mutation class=%@ display=%@ frame=%@",NSStringFromClass([mutableSettings class]),MTV(mutableSettings,@"displayConfiguration"),
+                      NSStringFromCGRect(((CGRect(*)(id,SEL))objc_msgSend)(mutableSettings,NSSelectorFromString(@"frame"))));
+            }@catch(NSException *e){MTLog(@"[DIRECTGO] mutation ERROR %@ %@",e.name,e.reason);}
+        }];
+
+        SEL act=NSSelectorFromString(@"pb_activate:withCompletion:");
+        if([scene respondsToSelector:act]){
+            MTLog(@"[DIRECTGO] pb_activate");
+            void (^cfg)(id)=^(id mutableSettings){
+                @try{
+                    SEL sd=NSSelectorFromString(@"setDisplayConfiguration:");
+                    SEL sf=NSSelectorFromString(@"setFrame:");
+                    SEL sfg=NSSelectorFromString(@"setForeground:");
+                    if([mutableSettings respondsToSelector:sd]) ((void(*)(id,SEL,id))objc_msgSend)(mutableSettings,sd,gCarDisplayConfig);
+                    if([mutableSettings respondsToSelector:sf]) ((void(*)(id,SEL,CGRect))objc_msgSend)(mutableSettings,sf,CGRectMake(0,0,426.66666666666663,240));
+                    if([mutableSettings respondsToSelector:sfg]) ((void(*)(id,SEL,BOOL))objc_msgSend)(mutableSettings,sfg,YES);
+                }@catch(NSException *e){MTLog(@"[DIRECTGO] activate mutation ERROR %@ %@",e.name,e.reason);}
+            };
+            void (^done)(id)=^(id result){MTLog(@"[DIRECTGO] completion result=%@ process=%@ settings=%@",result,MTV(scene,@"clientProcess"),MTV(scene,@"settings"));};
+            ((void(*)(id,SEL,id,id))objc_msgSend)(scene,act,cfg,done);
+        }else{
+            MTLog(@"[DIRECTGO] pb_activate selector missing");
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+            MTLog(@"[DIRECTGO] after process=%@ settings=%@ clientSettings=%@",MTV(scene,@"clientProcess"),MTV(scene,@"settings"),MTV(scene,@"clientSettings"));
+        });
+    }@catch(NSException *e){MTLog(@"[DIRECTGO] ERROR %@ %@",e.name,e.reason);}
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
