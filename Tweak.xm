@@ -218,12 +218,23 @@ static void MTTryDashboardLaunchYouTube(void){
         });
     }@catch(NSException*e){MTLog(@"[LAUNCH] ERROR %@ %@",e.name,e.reason);gDidLaunchYT=NO;}
 }
+static void MTProbeLaunchInfoClass(void){
+    NSArray *names=@[@"DBApplicationLaunchInfo",@"DBApplicationLaunchInformation",@"DBLaunchInfo",@"DBOpenApplicationEvent"];
+    for(NSString *cn in names){
+        Class c=NSClassFromString(cn);if(!c){MTLog(@"[LAUNCHINFO] %@ missing",cn);continue;}
+        MTLog(@"[LAUNCHINFO] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
+        unsigned int mc=0;Method *m=class_copyMethodList(c,&mc);
+        for(unsigned int i=0;i<mc;i++)MTLog(@"[LAUNCHINFO-METHOD] %@ -%@ types=%s",cn,NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+        free(m);
+    }
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
     MTProbeDBApplicationInfo();
     MTProbeFBSApplicationInfo();
     MTProbeApplicationProxy();
+    MTProbeLaunchInfoClass();
     MTTryBuildYouTubeAppInfo();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
     id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
