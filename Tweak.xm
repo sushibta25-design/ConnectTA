@@ -5,7 +5,8 @@
 
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil;
-static void MTValidateYouTubeInDashboard(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
+static void MTValidateYouTubeInDashboard(void);
+static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
 static void MTLog(NSString *fmt,...){va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
 static id MTV(id o,NSString*k){@try{return[o valueForKey:k];}@catch(__unused NSException*e){return nil;}}
 static NSString *MTBundleFromSID(NSString *sid){if(![sid isKindOfClass:NSString.class])return nil;for(NSString*p in [sid componentsSeparatedByString:@":"])if([p isEqualToString:@"com.google.ios.youtube"])return p;return nil;}
@@ -197,7 +198,25 @@ static void MTValidateYouTubeInDashboard(void){
         if([gDashboardEnv respondsToSelector:sid]) MTLog(@"[DASH] sceneIdentifier=%@",((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,sid,gYTAppInfo));
         if([gDashboardEnv respondsToSelector:frm]){CGRect r=((CGRect(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,frm,gYTAppInfo);MTLog(@"[DASH] sceneFrame=%@",NSStringFromCGRect(r));}
         if([gDashboardEnv respondsToSelector:scene]) MTLog(@"[DASH] existingScene=%@",((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,scene,gYTAppInfo));
+        MTTryDashboardLaunchYouTube();
     }@catch(NSException*e){MTLog(@"[DASH] ERROR %@ %@",e.name,e.reason);}
+}
+static BOOL gDidLaunchYT=NO;
+static void MTTryDashboardLaunchYouTube(void){
+    if(gDidLaunchYT||!gYTAppInfo||!gDashboardEnv)return;
+    SEL launch=NSSelectorFromString(@"_launchAppWithInfo:forURL:");
+    if(![gDashboardEnv respondsToSelector:launch]){MTLog(@"[LAUNCH] selector missing");return;}
+    gDidLaunchYT=YES;
+    @try{
+        MTLog(@"[LAUNCH] invoking Dashboard launch appInfo=%@ sceneID=%@",gYTAppInfo,
+              ((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,NSSelectorFromString(@"sceneIdentifierForAppInfo:"),gYTAppInfo));
+        ((void(*)(id,SEL,id,id))objc_msgSend)(gDashboardEnv,launch,gYTAppInfo,nil);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+            id scene=nil;
+            @try{scene=((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,NSSelectorFromString(@"sceneForAppInfo:"),gYTAppInfo);}@catch(__unused NSException*e){}
+            MTLog(@"[LAUNCH] after scene=%@",scene);
+        });
+    }@catch(NSException*e){MTLog(@"[LAUNCH] ERROR %@ %@",e.name,e.reason);gDidLaunchYT=NO;}
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
