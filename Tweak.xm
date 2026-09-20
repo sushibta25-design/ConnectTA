@@ -18,7 +18,19 @@ static void MTTryActivateDirectYouTubeScene(id scene);
 static void MTProbeDirectSceneObjects(void);
 static void MTProbeDirectSceneInputs(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
-static void MTLog(NSString *fmt,...){static unsigned long long written=0;if(written>262144)return;va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];written+=d.length;NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
+static void MTLog(NSString *fmt,...){
+    static unsigned long long written=0;
+    if(!fmt || written>131072) return;
+    if([fmt hasPrefix:@"[ENV]"] || [fmt hasPrefix:@"[ACT-METHOD]"] ||
+       [fmt hasPrefix:@"[HYBRID-DASH]"] || [fmt hasPrefix:@"[DIRECTGO]"] ||
+       [fmt hasPrefix:@"[DASH] waiting"] || [fmt hasPrefix:@"[FG-B]"]) return;
+    va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);
+    NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
+    written+=d.length;
+    NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];
+    if(!h){[d writeToFile:MTLogPath atomically:YES];return;}
+    [h seekToEndOfFile];[h writeData:d];[h closeFile];
+}
 static id MTV(id o,NSString*k){@try{return[o valueForKey:k];}@catch(__unused NSException*e){return nil;}}
 static NSString *MTBundleFromSID(NSString *sid){if(![sid isKindOfClass:NSString.class])return nil;for(NSString*p in [sid componentsSeparatedByString:@":"])if([p isEqualToString:@"com.google.ios.youtube"])return p;return nil;}
 static UIWindowScene *MTCarScene(void){for(UIScene*s in UIApplication.sharedApplication.connectedScenes)if([s isKindOfClass:UIWindowScene.class]){UIWindowScene*w=(UIWindowScene*)s;CGSize z=w.coordinateSpace.bounds.size;if(z.width>300&&z.height<=500)return w;}return nil;}
