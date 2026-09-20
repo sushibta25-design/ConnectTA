@@ -137,11 +137,30 @@ static void MTProbeFBSApplicationInfo(void){
     }
     free(m);
 }
+static void MTProbeApplicationProxy(void){
+    NSArray *names=@[@"LSApplicationProxy",@"LSApplicationWorkspace"];
+    for(NSString *cn in names){
+        Class c=NSClassFromString(cn);
+        if(!c){MTLog(@"[LSPROXY] class %@ missing",cn);continue;}
+        MTLog(@"[LSPROXY] class %@ present",cn);
+        Class meta=object_getClass(c);unsigned int mc=0;Method *m=class_copyMethodList(meta,&mc);
+        for(unsigned int i=0;i<mc;i++){
+            NSString *sn=NSStringFromSelector(method_getName(m[i]));
+            if([sn localizedCaseInsensitiveContainsString:@"application"]||
+               [sn localizedCaseInsensitiveContainsString:@"bundle"]||
+               [sn localizedCaseInsensitiveContainsString:@"proxy"]||
+               [sn localizedCaseInsensitiveContainsString:@"default"])
+                MTLog(@"[LSPROXY-METHOD] %@ +%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
+        }
+        free(m);
+    }
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
     MTProbeDBApplicationInfo();
     MTProbeFBSApplicationInfo();
+    MTProbeApplicationProxy();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
     id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
     if(!svc)return;
