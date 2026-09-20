@@ -896,6 +896,7 @@ static void MTHybridInstallAppBridge(void){
  NSString*sid=MTV((id)self,@"sceneID"); MTProbeControllerEnvironment((id)self,sid); NSString*b=MTBundleFromSID(sid);
  if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
    gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
+    NSMutableDictionary *forced=[settings mutableCopy]; forced[@"DBActivationSettingLaunchSource"]=@3; forced[@"DBActivationSettingForeground"]=@YES; gYTSettings=[forced copy]; MTLog(@"[FG-A] force controller foreground settings=%@",gYTSettings);
    static BOOL mtDidDumpScene=NO; if(!mtDidDumpScene){mtDidDumpScene=YES;dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTDumpSceneInternals((id)self);});}
    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHostYouTube();});
  }
