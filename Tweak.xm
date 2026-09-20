@@ -28,13 +28,39 @@ static void MTHostYouTube(void){
  }@catch(NSException*e){MTLog(@"[HOST] ERROR %@ %@",e.name,e.reason);}
 }
 
+static void MTDumpMethods(Class c, NSString *name){
+    unsigned int count=0;Method *methods=class_copyMethodList(c,&count);
+    for(unsigned int i=0;i<count;i++){
+        SEL sel=method_getName(methods[i]);NSString *sn=NSStringFromSelector(sel);
+        if([sn localizedCaseInsensitiveContainsString:@"activ"]||
+           [sn localizedCaseInsensitiveContainsString:@"launch"]||
+           [sn localizedCaseInsensitiveContainsString:@"application"]||
+           [sn localizedCaseInsensitiveContainsString:@"scene"]||
+           [sn localizedCaseInsensitiveContainsString:@"carplay"]||
+           [sn localizedCaseInsensitiveContainsString:@"foreground"])
+            MTLog(@"[ACT-METHOD] %@ -%@ types=%s",name,sn,method_getTypeEncoding(methods[i]));
+    }
+    free(methods);
+    Class meta=object_getClass(c);count=0;methods=class_copyMethodList(meta,&count);
+    for(unsigned int i=0;i<count;i++){
+        SEL sel=method_getName(methods[i]);NSString *sn=NSStringFromSelector(sel);
+        if([sn localizedCaseInsensitiveContainsString:@"activ"]||
+           [sn localizedCaseInsensitiveContainsString:@"launch"]||
+           [sn localizedCaseInsensitiveContainsString:@"application"]||
+           [sn localizedCaseInsensitiveContainsString:@"scene"]||
+           [sn localizedCaseInsensitiveContainsString:@"carplay"]||
+           [sn localizedCaseInsensitiveContainsString:@"shared"])
+            MTLog(@"[ACT-METHOD] %@ +%@ types=%s",name,sn,method_getTypeEncoding(methods[i]));
+    }
+    free(methods);
+}
 static void MTProbeActivationServices(void){
     NSArray *classes=@[@"SBSApplicationCarPlayService",@"SBApplicationController",@"DBApplicationInfoCache",@"DBApplicationLaunchService",@"DBProcessMonitor"];
     NSArray *sels=@[@"sharedInstance",@"sharedService",@"service",@"defaultService",@"applicationWithBundleIdentifier:",@"applicationForBundleIdentifier:",
                     @"requestActivationForBundleIdentifier:",@"activateApplication:",@"launchApplication:",@"openApplication:"];
     for(NSString *cn in classes){
         Class c=NSClassFromString(cn);if(!c){MTLog(@"[ACT-PROBE] class %@ missing",cn);continue;}
-        MTLog(@"[ACT-PROBE] class %@ present",cn);
+        MTLog(@"[ACT-PROBE] class %@ present",cn); MTDumpMethods(c,cn);
         id obj=nil;
         for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{obj=((id(*)(id,SEL))objc_msgSend)(c,sel);MTLog(@"[ACT-PROBE] %@ +%@ -> %@",cn,ss,obj);if(obj)break;}@catch(NSException*e){MTLog(@"[ACT-PROBE] %@ +%@ error=%@",cn,ss,e.name);}}}
         id target=obj?:c;
