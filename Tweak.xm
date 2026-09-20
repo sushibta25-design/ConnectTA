@@ -234,6 +234,24 @@ static void MTProbeLaunchInfoClass(void){
         free(m);
     }
 }
+static void MTDumpSceneInternals(id controller){
+    if(!controller)return;
+    id scene=MTV(controller,@"scene");
+    id update=MTV(controller,@"currentSceneUpdate");
+    id presenters=MTV(controller,@"scenePresentersByIdentifier");
+    MTLog(@"[SCENE] scene=%@ class=%@ update=%@ updateClass=%@ presenters=%@",scene,NSStringFromClass([scene class]),update,NSStringFromClass([update class]),presenters);
+    if(scene){
+        for(NSString *k in @[@"identifier",@"clientProcess",@"clientIdentity",@"settings",@"clientSettings",@"specification",@"definition",@"hostProcess",@"workspaceIdentifier"]){
+            MTLog(@"[SCENE] %@=%@",k,MTV(scene,k));
+        }
+    }
+    if(update){
+        unsigned int mc=0;Method *m=class_copyMethodList([update class],&mc);
+        for(unsigned int i=0;i<mc;i++) MTLog(@"[UPDATE-METHOD] -%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+        free(m);
+        MTLog(@"[UPDATE] %@",update);
+    }
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
