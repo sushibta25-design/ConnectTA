@@ -7,6 +7,7 @@ static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil; static id gDirectYTScene=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
+static void MTTryLaunchYouTubeProcess(void);
 static void MTProbeValidClientIdentity(void);
 static void MTBuildDirectDefinitionProbe(void);
 static void MTTryCreateDirectYouTubeScene(void);
@@ -184,6 +185,7 @@ static void MTTryBuildYouTubeAppInfo(void){
         gYTAppInfo=info;
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
         MTProbeRealYouTubeIdentity();
+        MTTryLaunchYouTubeProcess();
         MTProbeValidClientIdentity();
         MTBuildDirectDefinitionProbe();
         MTTryCreateDirectYouTubeScene();
@@ -541,7 +543,7 @@ static void MTTryActivateDirectYouTubeScene(id scene){
         });
 
         SEL act=NSSelectorFromString(@"pb_activate:withCompletion:");
-        if([scene respondsToSelector:act]){
+        if(NO && [scene respondsToSelector:act]){
             MTLog(@"[DIRECTGO] pb_activate");
             void (^cfg)(id)=^(id mutableSettings){
                 @try{
@@ -625,6 +627,30 @@ static void MTProbeProcessLaunchContext(void){
             }free(m);
         }
     }
+}
+static id gYTLaunchTransaction=nil;
+static void MTTryLaunchYouTubeProcess(void){
+    if(!gYTAppInfo)return;
+    id procIdent=MTV(gYTAppInfo,@"processIdentity");
+    Class txc=NSClassFromString(@"FBApplicationProcessLaunchTransaction");
+    Class ecc=NSClassFromString(@"FBProcessExecutionContext");
+    if(!procIdent||!txc||!ecc){MTLog(@"[PROCSTART] prerequisites missing");return;}
+    @try{
+        id ec=((id(*)(id,SEL,id))objc_msgSend)([ecc alloc],NSSelectorFromString(@"initWithIdentity:"),procIdent);
+        MTLog(@"[PROCSTART] executionContext=%@ identity=%@ launchIntent=%@",ec,MTV(ec,@"identity"),MTV(ec,@"launchIntent"));
+        id (^provider)(void)=^id{ MTLog(@"[PROCSTART] executionContextProvider called"); return ec; };
+        id tx=((id(*)(id,SEL,id,id))objc_msgSend)([txc alloc],NSSelectorFromString(@"initWithProcessIdentity:executionContextProvider:"),procIdent,provider);
+        gYTLaunchTransaction=tx;
+        MTLog(@"[PROCSTART] transaction=%@ class=%@",tx,NSStringFromClass([tx class]));
+        SEL begin=NSSelectorFromString(@"begin");
+        if([tx respondsToSelector:begin]){
+            MTLog(@"[PROCSTART] begin");
+            ((void(*)(id,SEL))objc_msgSend)(tx,begin);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+                MTLog(@"[PROCSTART] after failed=%@ process=%@ finished=%@",MTV(tx,@"failedLaunch"),MTV(tx,@"process"),MTV(MTV(tx,@"process"),@"finishedLaunching"));
+            });
+        }else MTLog(@"[PROCSTART] begin selector missing");
+    }@catch(NSException *e){MTLog(@"[PROCSTART] ERROR %@ %@",e.name,e.reason);}
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
