@@ -279,6 +279,27 @@ static void MTProbeSceneSpecificationClasses(void){
         } free(m);
     }
 }
+static void MTProbeIdentityAndSpecFactories(void){
+    NSArray *names=@[@"FBSApplicationIdentity",@"FBSProcessIdentity",@"UIApplicationSceneSpecification",@"UIApplicationStarkSceneSpecification",@"UIApplicationSceneSettings",@"UIApplicationSceneClientSettings"];
+    for(NSString *cn in names){
+        Class c=NSClassFromString(cn);if(!c){MTLog(@"[DIRECT] %@ missing",cn);continue;}
+        MTLog(@"[DIRECT] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
+        for(id target in @[c,object_getClass(c)]){
+            BOOL meta=(target==object_getClass(c));unsigned int mc=0;Method *m=class_copyMethodList(target,&mc);
+            for(unsigned int i=0;i<mc;i++){
+                NSString *sn=NSStringFromSelector(method_getName(m[i]));
+                if([sn localizedCaseInsensitiveContainsString:@"identity"]||
+                   [sn localizedCaseInsensitiveContainsString:@"bundle"]||
+                   [sn localizedCaseInsensitiveContainsString:@"application"]||
+                   [sn localizedCaseInsensitiveContainsString:@"specification"]||
+                   [sn localizedCaseInsensitiveContainsString:@"settings"]||
+                   [sn localizedCaseInsensitiveContainsString:@"init"])
+                    MTLog(@"[DIRECT-METHOD] %@ %c%@ types=%s",cn,meta?'+':'-',sn,method_getTypeEncoding(m[i]));
+            } free(m);
+        }
+    }
+    if(gYTAppInfo) MTLog(@"[DIRECT] yt applicationIdentity=%@ processIdentity=%@",MTV(gYTAppInfo,@"applicationIdentity"),MTV(gYTAppInfo,@"processIdentity"));
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
@@ -287,6 +308,7 @@ static void MTTryKnownCarPlayActivation(void){
     MTProbeApplicationProxy();
     MTProbeLaunchInfoClass();
     MTProbeSceneSpecificationClasses();
+    MTProbeIdentityAndSpecFactories();
     MTTryBuildYouTubeAppInfo();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
     id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
