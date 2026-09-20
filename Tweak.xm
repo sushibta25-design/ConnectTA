@@ -606,6 +606,26 @@ static void MTProbeClientProviderPath(void){
         }
     }
 }
+static void MTProbeProcessLaunchContext(void){
+    NSArray *names=@[@"FBProcessExecutionContext",@"FBApplicationProcessExecutionContext",@"RBSLaunchContext",@"RBSProcessIdentity","FBApplicationProcessLaunchTransaction"];
+    for(NSString *cn in names){
+        Class c=NSClassFromString(cn);if(!c){MTLog(@"[EXECCTX] %@ missing",cn);continue;}
+        MTLog(@"[EXECCTX] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
+        for(id target in @[c,object_getClass(c)]){
+            BOOL meta=(target==object_getClass(c));unsigned int mc=0;Method*m=class_copyMethodList(target,&mc);
+            for(unsigned int i=0;i<mc;i++){
+                NSString*sn=NSStringFromSelector(method_getName(m[i]));
+                if([sn localizedCaseInsensitiveContainsString:@"init"]||
+                   [sn localizedCaseInsensitiveContainsString:@"context"]||
+                   [sn localizedCaseInsensitiveContainsString:@"identity"]||
+                   [sn localizedCaseInsensitiveContainsString:@"bundle"]||
+                   [sn localizedCaseInsensitiveContainsString:@"launch"]||
+                   [sn localizedCaseInsensitiveContainsString:@"application"])
+                    MTLog(@"[EXECCTX-METHOD] %@ %c%@ types=%s",cn,meta?'+':'-',sn,method_getTypeEncoding(m[i]));
+            }free(m);
+        }
+    }
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
@@ -615,6 +635,7 @@ static void MTTryKnownCarPlayActivation(void){
     MTProbeLaunchInfoClass();
     MTProbeSceneSpecificationClasses();
     MTProbeClientProviderPath();
+    MTProbeProcessLaunchContext();
     MTProbeIdentityAndSpecFactories();
     MTTryBuildYouTubeAppInfo();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
