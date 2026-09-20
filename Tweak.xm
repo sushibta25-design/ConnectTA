@@ -416,7 +416,10 @@ static void MTBuildDirectDefinitionProbe(void){
 static BOOL gDidCreateDirectYT=NO;
 static void MTTryCreateDirectYouTubeScene(void){
     if(gDidCreateDirectYT||!gYTAppInfo)return;
-    id client=MTV(gYTAppInfo,@"applicationIdentity");
+    id proc=MTV(gYTAppInfo,@"processIdentity");
+    id client=nil;
+    SEL cidSel=NSSelectorFromString(@"fbs_sceneClientIdentity");
+    if(proc && [proc respondsToSelector:cidSel]) client=((id(*)(id,SEL))objc_msgSend)(proc,cidSel);
     Class dc=NSClassFromString(@"FBSSceneDefinition"),ic=NSClassFromString(@"FBSSceneIdentity");
     Class sc=NSClassFromString(@"UIApplicationStarkSceneSpecification"),mc=NSClassFromString(@"FBSceneManager");
     if(!client||!dc||!ic||!sc||!mc){MTLog(@"[DIRECTCREATE] prerequisites missing client=%@",client);return;}
@@ -428,7 +431,7 @@ static void MTTryCreateDirectYouTubeScene(void){
         ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setIdentity:"),ident);
         ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setClientIdentity:"),client);
         ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setSpecification:"),spec);
-        MTLog(@"[DIRECTCREATE] client=%@ class=%@",client,NSStringFromClass([client class]));
+        MTLog(@"[DIRECTCREATE] process=%@ sceneClientIdentity=%@ class=%@ isValidSel=%d",proc,client,NSStringFromClass([client class]),[client respondsToSelector:NSSelectorFromString(@"isValid")]);
         BOOL valid=((BOOL(*)(id,SEL))objc_msgSend)(def,NSSelectorFromString(@"isValid"));
         MTLog(@"[DIRECTCREATE] definition valid=%d def=%@",valid,def);
         if(!valid)return;
