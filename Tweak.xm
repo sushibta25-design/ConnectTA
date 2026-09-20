@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
+static __weak id gMTHybridDashboard=nil;
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil; static id gDirectYTScene=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
@@ -698,7 +699,6 @@ static void __attribute__((unused)) MTHybridRequestYouTubeLaunch(void){
         }else MTLog(@"[HYBRID-LAUNCH] dashboard launch selector missing");
     }@catch(NSException *e){MTLog(@"[HYBRID-LAUNCH] ERROR %@ %@",e.name,e.reason);}
 }
-static __weak id gMTHybridDashboard=nil;
 static __weak id gMTHybridWorkspace=nil;
 static IMP mtOrigWorkspaceInit=nil;
 static id MTHybridWorkspaceInit(id self,SEL _cmd,id owner){
