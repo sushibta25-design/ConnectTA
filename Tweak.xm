@@ -17,7 +17,9 @@ static void MTDump(NSString *why){
 }
 %hook UIWindow
 - (instancetype)initWithFrame:(CGRect)frame{
-    id r=%orig;MTLog(@"[WINDOW] init frame=%@",NSStringFromCGRect(frame));return r;
+    self=%orig;
+    MTLog(@"[WINDOW] init frame=%@",NSStringFromCGRect(frame));
+    return self;
 }
 - (void)setScreen:(UIScreen *)screen{
     MTLog(@"[WINDOW] setScreen=%@ bounds=%@",screen,NSStringFromCGRect(screen.bounds));%orig;
@@ -32,7 +34,6 @@ static void MTDump(NSString *why){
             NSNotificationCenter *nc=NSNotificationCenter.defaultCenter;
             [nc addObserverForName:UIScreenDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*n){MTLog(@"[EVENT] UIScreenDidConnect object=%@",n.object);MTDump(@"SCREEN_CONNECT");}];
             [nc addObserverForName:UIScreenDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*n){MTLog(@"[EVENT] UIScreenDidDisconnect object=%@",n.object);MTDump(@"SCREEN_DISCONNECT");}];
-            [nc addObserverForName:UISceneDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*n){MTLog(@"[EVENT] UISceneDidConnect object=%@",n.object);MTDump(@"SCENE_CONNECT");}];
             // Phase 1A: harmless synthetic notification. This does NOT create a real UIScreen.
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(3*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
                 MTLog(@"[TEST] posting synthetic UIScreenDidConnectNotification mainScreen");
