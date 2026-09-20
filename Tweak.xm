@@ -730,7 +730,7 @@ static void MTHybridActivateViaWorkspace(void){
         });
     }
 }
-static void MTHybridActivateViaWorkspace(void);
+static void MTHybridActivateViaWorkspace(void) __attribute__((unused));
 static void MTHybridRefreshRosterAndActivate(void){
     Class car=NSClassFromString(@"CARApplication");
     MTLog(@"[HYBRID-ROSTER] CARApplication=%@",car);
