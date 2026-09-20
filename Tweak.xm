@@ -852,8 +852,17 @@ static void MTHybridInstallAppBridge(void){
 }
 - (void)_handleOpenApplicationEvent:(id)event {
     MTLog(@"[HYBRID-OPEN] event=%@ class=%@",event,NSStringFromClass([event class]));
-    for(NSString *k in @[@"application",@"applicationInfo",@"launchInfo",@"bundleIdentifier",@"URL",@"url",@"source"]){
+    for(NSString *k in @[@"application",@"applicationInfo",@"launchInfo",@"bundleIdentifier",@"URL",@"url",@"source",@"type",@"name",@"payload",@"userInfo",@"value",@"identifier"]){
         id v=MTV(event,k);if(v)MTLog(@"[HYBRID-OPEN] key=%@ value=%@ class=%@",k,v,NSStringFromClass([v class]));
+    }
+    static BOOL dumped=NO;if(!dumped){dumped=YES;
+        unsigned int ic=0;Ivar *ivs=class_copyIvarList([event class],&ic);
+        for(unsigned int i=0;i<ic;i++){const char*n=ivar_getName(ivs[i]);const char*t=ivar_getTypeEncoding(ivs[i]);id v=nil;@try{v=object_getIvar(event,ivs[i]);}@catch(__unused NSException*e){}
+            MTLog(@"[HYBRID-EVENT-IVAR] %s type=%s value=%@ class=%@",n?:"?",t?:"?",v,NSStringFromClass([v class]));}free(ivs);
+        unsigned int mc=0;Method *ms=class_copyMethodList([event class],&mc);
+        for(unsigned int i=0;i<mc;i++){NSString*n=NSStringFromSelector(method_getName(ms[i]));NSString*l=n.lowercaseString;
+            if([l containsString:@"application"]||[l containsString:@"bundle"]||[l containsString:@"payload"]||[l containsString:@"event"]||[l containsString:@"identifier"]||[l containsString:@"value"]||[l containsString:@"info"])
+                MTLog(@"[HYBRID-EVENT-METHOD] -%@ types=%s",n,method_getTypeEncoding(ms[i]));}free(ms);
     }
     %orig;
 }
