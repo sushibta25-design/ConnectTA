@@ -541,7 +541,7 @@ static void MTTryActivateDirectYouTubeScene(id scene){
               MTV(scene,@"clientProcess"),MTV(settings,@"displayConfiguration"),
               NSStringFromCGRect(((CGRect(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"frame"))),
               @(((BOOL(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"isForeground"))));
-        if(!gCarDisplayConfig){Class fdc=NSClassFromString(@"FBSDisplayConfiguration");for(UIScene *us in UIApplication.sharedApplication.connectedScenes){if(![us isKindOfClass:UIWindowScene.class])continue;id scr=MTV(us,@"screen");id dc=MTV(scr,@"_fbsDisplayConfiguration");if(!dc)dc=MTV(scr,@"displayConfiguration");if(dc){gCarDisplayConfig=dc;MTLog(@"[DIRECTGO] display from UIWindowScene=%@",dc);break;}}}
+        if(!gCarDisplayConfig){for(UIScene *us in UIApplication.sharedApplication.connectedScenes){if(![us isKindOfClass:UIWindowScene.class])continue;id scr=((UIWindowScene*)us).screen;id dc=MTV(scr,@"_fbsDisplayConfiguration");if(!dc)dc=MTV(scr,@"displayConfiguration");if(dc){gCarDisplayConfig=dc;MTLog(@"[DIRECTGO] display from UIWindowScene=%@",dc);break;}}}
         if(!gCarDisplayConfig && gYTController){id ps=MTV(gYTController,@"scene");id pset=MTV(ps,@"settings");gCarDisplayConfig=MTV(pset,@"displayConfiguration");MTLog(@"[DIRECTGO] borrowed display=%@",gCarDisplayConfig);}
         if(!gCarDisplayConfig){static int displayRetry=0;if(displayRetry++<8){MTLog(@"[DIRECTGO] display unavailable; retry %d",displayRetry);dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.7*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryActivateDirectYouTubeScene(scene);});}else MTLog(@"[DIRECTGO] display unavailable; giving up");return;}
 
