@@ -45,24 +45,12 @@ static void MTDumpMethods(Class c, NSString *name){
     unsigned int count=0;Method *methods=class_copyMethodList(c,&count);
     for(unsigned int i=0;i<count;i++){
         SEL sel=method_getName(methods[i]);NSString *sn=NSStringFromSelector(sel);
-        if([sn localizedCaseInsensitiveContainsString:@"activ"]||
-           [sn localizedCaseInsensitiveContainsString:@"launch"]||
-           [sn localizedCaseInsensitiveContainsString:@"application"]||
-           [sn localizedCaseInsensitiveContainsString:@"scene"]||
-           [sn localizedCaseInsensitiveContainsString:@"carplay"]||
-           [sn localizedCaseInsensitiveContainsString:@"foreground"])
-    }
+        if([sn localizedCaseInsensitiveContainsString:@"activ"]||[sn localizedCaseInsensitiveContainsString:@"launch"]||[sn localizedCaseInsensitiveContainsString:@"application"]||[sn localizedCaseInsensitiveContainsString:@"scene"]||[sn localizedCaseInsensitiveContainsString:@"carplay"]||[sn localizedCaseInsensitiveContainsString:@"foreground"]){ /* quiet */ }
     free(methods);
     Class meta=object_getClass(c);count=0;methods=class_copyMethodList(meta,&count);
     for(unsigned int i=0;i<count;i++){
         SEL sel=method_getName(methods[i]);NSString *sn=NSStringFromSelector(sel);
-        if([sn localizedCaseInsensitiveContainsString:@"activ"]||
-           [sn localizedCaseInsensitiveContainsString:@"launch"]||
-           [sn localizedCaseInsensitiveContainsString:@"application"]||
-           [sn localizedCaseInsensitiveContainsString:@"scene"]||
-           [sn localizedCaseInsensitiveContainsString:@"carplay"]||
-           [sn localizedCaseInsensitiveContainsString:@"shared"])
-    }
+        if([sn localizedCaseInsensitiveContainsString:@"activ"]||[sn localizedCaseInsensitiveContainsString:@"launch"]||[sn localizedCaseInsensitiveContainsString:@"application"]||[sn localizedCaseInsensitiveContainsString:@"scene"]||[sn localizedCaseInsensitiveContainsString:@"carplay"]||[sn localizedCaseInsensitiveContainsString:@"shared"]){ /* quiet */ }
     free(methods);
 }
 static void MTProbeActivationServices(void){
