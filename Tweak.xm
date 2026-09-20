@@ -676,6 +676,7 @@ static void MTTryKnownCarPlayActivation(void){
 }
 
 static void MTHybridRequestYouTubeLaunch(void){
+    MTLog(@"[HYBRID-LAUNCH] AUTO-LAUNCH DISABLED"); return;
     Class proxy=NSClassFromString(@"LSApplicationProxy");
     Class info=NSClassFromString(@"DBApplicationInfo");
     if(!proxy||!info){MTLog(@"[HYBRID-LAUNCH] classes missing proxy=%@ info=%@",proxy,info);return;}
@@ -813,5 +814,5 @@ static void MTHybridInstallAppBridge(void){
     [[NSFileManager defaultManager]removeItemAtPath:MTLogPath error:nil];
     MTLog(@"=== MINITA HYBRID CARPLAY === bundle=%@ process=%@",bundle,NSProcessInfo.processInfo.processName);
     MTHybridInstallAdmission();
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(3.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTHybridRequestYouTubeLaunch(); });
+    MTLog(@"[HYBRID] passive mode: admission installed; no automatic Dashboard launch");
 }}
