@@ -67,8 +67,38 @@ static void MTProbeActivationServices(void){
         for(NSString *ss in sels){SEL sel=NSSelectorFromString(ss);if([target respondsToSelector:sel])MTLog(@"[ACT-PROBE] %@ responds %@",cn,ss);}
     }
 }
+static void MTProbeDBSceneController(void){
+    Class c=NSClassFromString(@"DBApplicationSceneViewController");
+    if(!c){MTLog(@"[DBSCENE] class missing");return;}
+    MTLog(@"[DBSCENE] class present superclass=%@",NSStringFromClass(class_getSuperclass(c)));
+    MTDumpMethods(c,@"DBApplicationSceneViewController");
+    unsigned int count=0;Ivar *ivars=class_copyIvarList(c,&count);
+    for(unsigned int i=0;i<count;i++){
+        const char *n=ivar_getName(ivars[i]);const char *t=ivar_getTypeEncoding(ivars[i]);
+        NSString *name=n?[NSString stringWithUTF8String:n]:@"";
+        if([name localizedCaseInsensitiveContainsString:@"manager"]||
+           [name localizedCaseInsensitiveContainsString:@"scene"]||
+           [name localizedCaseInsensitiveContainsString:@"service"]||
+           [name localizedCaseInsensitiveContainsString:@"application"]||
+           [name localizedCaseInsensitiveContainsString:@"process"])
+            MTLog(@"[DB-IVAR] %@ type=%s",name,t?:@"");
+    }
+    free(ivars);
+    unsigned int pc=0;objc_property_t *props=class_copyPropertyList(c,&pc);
+    for(unsigned int i=0;i<pc;i++){
+        NSString *name=[NSString stringWithUTF8String:property_getName(props[i])];
+        if([name localizedCaseInsensitiveContainsString:@"manager"]||
+           [name localizedCaseInsensitiveContainsString:@"scene"]||
+           [name localizedCaseInsensitiveContainsString:@"service"]||
+           [name localizedCaseInsensitiveContainsString:@"application"]||
+           [name localizedCaseInsensitiveContainsString:@"process"])
+            MTLog(@"[DB-PROP] %@ attrs=%s",name,property_getAttributes(props[i]));
+    }
+    free(props);
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
+    MTProbeDBSceneController();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
     id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
     if(!svc)return;
