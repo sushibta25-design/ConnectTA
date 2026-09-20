@@ -698,6 +698,38 @@ static void __attribute__((unused)) MTHybridRequestYouTubeLaunch(void){
         }else MTLog(@"[HYBRID-LAUNCH] dashboard launch selector missing");
     }@catch(NSException *e){MTLog(@"[HYBRID-LAUNCH] ERROR %@ %@",e.name,e.reason);}
 }
+static __weak id gMTHybridWorkspace=nil;
+static IMP mtOrigWorkspaceInit=nil;
+static id MTHybridWorkspaceInit(id self,SEL _cmd,id owner){
+    id result=((id(*)(id,SEL,id))mtOrigWorkspaceInit)(self,_cmd,owner);
+    NSString *oc=owner?NSStringFromClass([owner class]):@"";
+    if([oc isEqualToString:@"DBDashboardWorkspaceOwner"]){gMTHybridWorkspace=result;MTLog(@"[HYBRID-WS] captured workspace=%@",result);}
+    return result;
+}
+static void MTHybridInstallWorkspaceCapture(void){
+    Class c=NSClassFromString(@"DBWorkspace");Method m=c?class_getInstanceMethod(c,NSSelectorFromString(@"initWithOwner:")):NULL;
+    if(!m){MTLog(@"[HYBRID-WS] DBWorkspace/initWithOwner missing");return;}
+    mtOrigWorkspaceInit=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridWorkspaceInit);
+    MTLog(@"[HYBRID-WS] capture installed");
+}
+static void MTHybridActivateViaWorkspace(void){
+    id ws=gMTHybridWorkspace;if(!ws){MTLog(@"[HYBRID-WS] no workspace");return;}
+    Class cc=NSClassFromString(@"DBApplicationController");
+    id ctl=(cc&&[cc respondsToSelector:NSSelectorFromString(@"sharedInstance")])?((id(*)(id,SEL))objc_msgSend)(cc,NSSelectorFromString(@"sharedInstance")):nil;
+    id app=(ctl&&[ctl respondsToSelector:NSSelectorFromString(@"applicationWithBundleIdentifier:")])?((id(*)(id,SEL,id))objc_msgSend)(ctl,NSSelectorFromString(@"applicationWithBundleIdentifier:"),@"com.google.ios.youtube"):nil;
+    MTLog(@"[HYBRID-WS] roster application=%@",app);
+    if(!app)return;
+    Class rc=NSClassFromString(@"DBMutableWorkspaceStateChangeRequest");id req=rc?[rc new]:nil;
+    SEL activate=NSSelectorFromString(@"activateApplication:"),change=NSSelectorFromString(@"requestStateChange:");
+    if(req&&[req respondsToSelector:activate]&&[ws respondsToSelector:change]){
+        ((void(*)(id,SEL,id))objc_msgSend)(req,activate,app);
+        MTLog(@"[HYBRID-WS] requesting activation");
+        ((void(*)(id,SEL,id))objc_msgSend)(ws,change,req);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+            id state=MTV(ws,@"state");MTLog(@"[HYBRID-WS] active=%@",MTV(state,@"activeBundleIdentifier"));
+        });
+    }
+}
 #pragma mark - MiniTa hybrid bridge (DuoPhone host + CarSurf-style role bridge)
 
 static BOOL MTHybridIsYTProxy(id proxy){
@@ -792,6 +824,13 @@ static void MTHybridInstallAppBridge(void){
         MTLog(@"[HYBRID-APP] ACTIVATE sid=%@ role=%@ class=%@ screen=%@",sid,scene.session.role,NSStringFromClass(scene.class),[scene isKindOfClass:UIWindowScene.class]?((UIWindowScene*)scene).screen:nil);
     }];
 }
+%hook DBDashboard
+- (void)_handleCarPlayUIReady {
+    %orig;
+    static BOOL once=NO;if(once)return;once=YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHybridActivateViaWorkspace();});
+}
+%end
 %hook DBApplicationSceneViewController
 - (void)foregroundSceneWithSettings:(id)settings completion:(id)completion{
  NSString*sid=MTV((id)self,@"sceneID"); MTProbeControllerEnvironment((id)self,sid); NSString*b=MTBundleFromSID(sid);
@@ -814,5 +853,6 @@ static void MTHybridInstallAppBridge(void){
     [[NSFileManager defaultManager]removeItemAtPath:MTLogPath error:nil];
     MTLog(@"=== MINITA HYBRID CARPLAY === bundle=%@ process=%@",bundle,NSProcessInfo.processInfo.processName);
     MTHybridInstallAdmission();
-    MTLog(@"[HYBRID] passive mode: admission installed; no automatic Dashboard launch");
+    MTHybridInstallWorkspaceCapture();
+    MTLog(@"[HYBRID] workspace mode installed; waiting for CarPlay UI ready");
 }}
