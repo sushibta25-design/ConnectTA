@@ -4,7 +4,7 @@
 #import <objc/runtime.h>
 
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
-static id gYTController=nil; static NSDictionary *gYTSettings=nil; static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
+static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
 static void MTLog(NSString *fmt,...){va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
 static id MTV(id o,NSString*k){@try{return[o valueForKey:k];}@catch(__unused NSException*e){return nil;}}
 static NSString *MTBundleFromSID(NSString *sid){if(![sid isKindOfClass:NSString.class])return nil;for(NSString*p in [sid componentsSeparatedByString:@":"])if([p isEqualToString:@"com.google.ios.youtube"])return p;return nil;}
@@ -171,8 +171,17 @@ static void MTTryBuildYouTubeAppInfo(void){
         if(!info)return;
         if([info respondsToSelector:NSSelectorFromString(@"setCBFake:")])((void(*)(id,SEL,BOOL))objc_msgSend)(info,NSSelectorFromString(@"setCBFake:"),YES);
         if([info respondsToSelector:NSSelectorFromString(@"setCBBridged:")])((void(*)(id,SEL,BOOL))objc_msgSend)(info,NSSelectorFromString(@"setCBBridged:"),YES);
+        gYTAppInfo=info;
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
     }@catch(NSException*e){MTLog(@"[BUILD] ERROR %@ %@",e.name,e.reason);}
+}
+static void MTProbeControllerEnvironment(id controller, NSString *sid){
+    if(!controller)return;
+    id env=MTV(controller,@"environment");
+    id req=MTV(controller,@"requester");
+    MTLog(@"[ENV] sid=%@ controller=%@ environment=%@ envClass=%@ requester=%@ requesterClass=%@",
+          sid,NSStringFromClass([controller class]),env,NSStringFromClass([env class]),req,NSStringFromClass([req class]));
+    if(env)MTDumpMethods([env class],[NSString stringWithFormat:@"ENV:%@",NSStringFromClass([env class])]);
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
@@ -193,7 +202,7 @@ static void MTTryKnownCarPlayActivation(void){
 }
 %hook DBApplicationSceneViewController
 - (void)foregroundSceneWithSettings:(id)settings completion:(id)completion{
- NSString*sid=MTV((id)self,@"sceneID");NSString*b=MTBundleFromSID(sid);
+ NSString*sid=MTV((id)self,@"sceneID"); MTProbeControllerEnvironment((id)self,sid); NSString*b=MTBundleFromSID(sid);
  if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
    gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHostYouTube();});
