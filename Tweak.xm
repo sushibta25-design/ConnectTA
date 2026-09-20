@@ -22,7 +22,7 @@ static void MTLog(NSString *fmt,...){
     static unsigned long long written=0;
     if(!fmt || written>131072) return;
     if([fmt hasPrefix:@"[DIRECTACT-METHOD]"] || [fmt hasPrefix:@"[CAPTURE]"] || [fmt hasPrefix:@"[HOST]"] || [fmt hasPrefix:@"[ENV]"] || [fmt hasPrefix:@"[ACT-METHOD]"] ||
-       [fmt hasPrefix:@"[HYBRID-DASH]"] || [fmt hasPrefix:@"[DIRECTGO]"] ||
+       [fmt hasPrefix:@"[HYBRID-DASH]"] ||
        [fmt hasPrefix:@"[DASH] waiting"] || [fmt hasPrefix:@"[FG-B]"]) return;
     va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);
     NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
@@ -541,7 +541,8 @@ static void MTTryActivateDirectYouTubeScene(id scene){
               MTV(scene,@"clientProcess"),MTV(settings,@"displayConfiguration"),
               NSStringFromCGRect(((CGRect(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"frame"))),
               @(((BOOL(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"isForeground"))));
-        if(!gCarDisplayConfig){MTLog(@"[DIRECTGO] waiting for CarPlay displayConfiguration");return;}
+        if(!gCarDisplayConfig && gYTController){id ps=MTV(gYTController,@"scene");id pset=MTV(ps,@"settings");gCarDisplayConfig=MTV(pset,@"displayConfiguration");MTLog(@"[DIRECTGO] borrowed display=%@",gCarDisplayConfig);}
+        if(!gCarDisplayConfig){MTLog(@"[DIRECTGO] display unavailable; retry");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.7*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryActivateDirectYouTubeScene(scene);});return;}
 
         ((void(*)(id,SEL,id))objc_msgSend)(scene,NSSelectorFromString(@"updateSettingsWithBlock:"),^(id mutableSettings){
             @try{
