@@ -252,6 +252,33 @@ static void __attribute__((used)) MTDumpSceneInternals(id controller){
         MTLog(@"[UPDATE] %@",update);
     }
 }
+static void MTProbeSceneSpecificationClasses(void){
+    NSArray *names=@[@"CRSUIProxyApplicationSceneSpecification",@"FBSSceneDefinition",@"FBSSceneIdentity",@"FBSceneManager"];
+    for(NSString *cn in names){
+        Class c=NSClassFromString(cn); if(!c){MTLog(@"[SPEC] %@ missing",cn);continue;}
+        MTLog(@"[SPEC] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
+        unsigned int mc=0; Method *m=class_copyMethodList(c,&mc);
+        for(unsigned int i=0;i<mc;i++){
+            NSString *sn=NSStringFromSelector(method_getName(m[i]));
+            if([sn localizedCaseInsensitiveContainsString:@"init"]||
+               [sn localizedCaseInsensitiveContainsString:@"identity"]||
+               [sn localizedCaseInsensitiveContainsString:@"client"]||
+               [sn localizedCaseInsensitiveContainsString:@"application"]||
+               [sn localizedCaseInsensitiveContainsString:@"scene"]||
+               [sn localizedCaseInsensitiveContainsString:@"specification"])
+                MTLog(@"[SPEC-METHOD] %@ -%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
+        } free(m);
+        Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
+        for(unsigned int i=0;i<mc;i++){
+            NSString *sn=NSStringFromSelector(method_getName(m[i]));
+            if([sn localizedCaseInsensitiveContainsString:@"identity"]||
+               [sn localizedCaseInsensitiveContainsString:@"application"]||
+               [sn localizedCaseInsensitiveContainsString:@"scene"]||
+               [sn localizedCaseInsensitiveContainsString:@"specification"])
+                MTLog(@"[SPEC-METHOD] %@ +%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
+        } free(m);
+    }
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
@@ -259,6 +286,7 @@ static void MTTryKnownCarPlayActivation(void){
     MTProbeFBSApplicationInfo();
     MTProbeApplicationProxy();
     MTProbeLaunchInfoClass();
+    MTProbeSceneSpecificationClasses();
     MTTryBuildYouTubeAppInfo();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
     id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
