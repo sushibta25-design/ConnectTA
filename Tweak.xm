@@ -8,6 +8,7 @@ static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYT
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
 static void MTBuildDirectDefinitionProbe(void);
+static void MTTryCreateDirectYouTubeScene(void);
 static void MTProbeDirectSceneObjects(void);
 static void MTProbeDirectSceneInputs(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
@@ -181,6 +182,7 @@ static void MTTryBuildYouTubeAppInfo(void){
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
         MTProbeRealYouTubeIdentity();
         MTBuildDirectDefinitionProbe();
+        MTTryCreateDirectYouTubeScene();
         MTProbeDirectSceneObjects();
         MTProbeDirectSceneInputs();
         MTValidateYouTubeInDashboard();
@@ -408,6 +410,34 @@ static void MTBuildDirectDefinitionProbe(void){
               def,MTV(def,@"isValid"),MTV(def,@"identity"),MTV(def,@"clientIdentity"),MTV(def,@"specification"),
               MTV(spec,@"settingsClass"),MTV(spec,@"clientSettingsClass"));
     }@catch(NSException *e){MTLog(@"[DIRECTDEF] ERROR %@ %@",e.name,e.reason);}
+}
+static BOOL gDidCreateDirectYT=NO;
+static void MTTryCreateDirectYouTubeScene(void){
+    if(gDidCreateDirectYT||!gYTAppInfo)return;
+    id proc=MTV(gYTAppInfo,@"processIdentity");
+    Class dc=NSClassFromString(@"FBSSceneDefinition"),ic=NSClassFromString(@"FBSSceneIdentity");
+    Class sc=NSClassFromString(@"UIApplicationStarkSceneSpecification"),mc=NSClassFromString(@"FBSceneManager");
+    if(!proc||!dc||!ic||!sc||!mc){MTLog(@"[DIRECTCREATE] prerequisites missing");return;}
+    @try{
+        id def=((id(*)(id,SEL))objc_msgSend)(dc,NSSelectorFromString(@"definition"));
+        NSString *sid=@"MiniTa.Direct.com.google.ios.youtube";
+        id ident=((id(*)(id,SEL,id,id))objc_msgSend)(ic,NSSelectorFromString(@"identityForIdentifier:workspaceIdentifier:"),sid,@"kDBAppWorkspaceIdentifier");
+        id spec=[[sc alloc] init];
+        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setIdentity:"),ident);
+        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setClientIdentity:"),proc);
+        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setSpecification:"),spec);
+        BOOL valid=((BOOL(*)(id,SEL))objc_msgSend)(def,NSSelectorFromString(@"isValid"));
+        MTLog(@"[DIRECTCREATE] definition valid=%d def=%@",valid,def);
+        if(!valid)return;
+        id mgr=((id(*)(id,SEL))objc_msgSend)(mc,NSSelectorFromString(@"sharedInstance"));
+        gDidCreateDirectYT=YES;
+        id scene=((id(*)(id,SEL,id))objc_msgSend)(mgr,NSSelectorFromString(@"createSceneWithDefinition:"),def);
+        MTLog(@"[DIRECTCREATE] returned scene=%@ class=%@",scene,NSStringFromClass([scene class]));
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+            id again=((id(*)(id,SEL,id))objc_msgSend)(mgr,NSSelectorFromString(@"sceneWithIdentifier:"),sid);
+            MTLog(@"[DIRECTCREATE] after scene=%@ clientProcess=%@ definition=%@",again,MTV(again,@"clientProcess"),MTV(again,@"definition"));
+        });
+    }@catch(NSException *e){MTLog(@"[DIRECTCREATE] ERROR %@ %@",e.name,e.reason);gDidCreateDirectYT=NO;}
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
