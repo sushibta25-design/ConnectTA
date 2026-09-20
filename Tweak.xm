@@ -573,6 +573,8 @@ static void MTTryActivateDirectYouTubeScene(id scene){
             };
             void (^done)(id)=^(id result){MTLog(@"[DIRECTGO] completion result=%@ process=%@ settings=%@",result,MTV(scene,@"clientProcess"),MTV(scene,@"settings"));};
             ((void(*)(id,SEL,id,id))objc_msgSend)(scene,act,cfg,done);
+            MTLog(@"[DIRECTGO] pb_activate returned");
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{id st=MTV(scene,@"settings");id cs=MTV(scene,@"clientSettings");MTLog(@"[DIRECTCHECK] process=%@ foreground=%@ display=%@ frame=%@ clientSettings=%@",MTV(scene,@"clientProcess"),MTV(st,@"foreground"),MTV(st,@"displayConfiguration"),MTV(st,@"frame"),cs);});
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
                 id cp=MTV(scene,@"clientProcess");
                 MTLog(@"[DIRECTGO] watchdog process=%@ settings=%@",cp,MTV(scene,@"settings"));
