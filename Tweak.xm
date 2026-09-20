@@ -10,6 +10,7 @@ static void MTProbeRealYouTubeIdentity(void);
 static void MTProbeValidClientIdentity(void);
 static void MTBuildDirectDefinitionProbe(void);
 static void MTTryCreateDirectYouTubeScene(void);
+static void MTProbeDirectSceneActivation(id scene);
 static void MTProbeDirectSceneObjects(void);
 static void MTProbeDirectSceneInputs(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
@@ -439,6 +440,7 @@ static void MTTryCreateDirectYouTubeScene(void){
         gDidCreateDirectYT=YES;
         id scene=((id(*)(id,SEL,id))objc_msgSend)(mgr,NSSelectorFromString(@"createSceneWithDefinition:"),def);
         MTLog(@"[DIRECTCREATE] returned scene=%@ class=%@",scene,NSStringFromClass([scene class]));
+        MTProbeDirectSceneActivation(scene);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
             id again=((id(*)(id,SEL,id))objc_msgSend)(mgr,NSSelectorFromString(@"sceneWithIdentifier:"),sid);
             MTLog(@"[DIRECTCREATE] after scene=%@ clientProcess=%@ definition=%@",again,MTV(again,@"clientProcess"),MTV(again,@"definition"));
@@ -474,6 +476,27 @@ static void MTProbeValidClientIdentity(void){
             NSString*sn=NSStringFromSelector(method_getName(m[i]));
             if([sn localizedCaseInsensitiveContainsString:@"identity"]||[sn localizedCaseInsensitiveContainsString:@"process"]||[sn localizedCaseInsensitiveContainsString:@"application"])
                 MTLog(@"[CIDMETHOD] %@ +%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
+        }free(m);
+    }
+}
+static void MTProbeDirectSceneActivation(id scene){
+    if(!scene)return;
+    MTLog(@"[DIRECTACT] scene=%@ clientProcess=%@ settings=%@ clientSettings=%@",scene,MTV(scene,@"clientProcess"),MTV(scene,@"settings"),MTV(scene,@"clientSettings"));
+    NSArray *classes=@[@"FBScene",@"FBSSceneParameters",@"FBSSceneParametersMutable",@"FBSSceneSettings",@"UICarPlayApplicationSceneSettings",@"UIApplicationSceneClientSettings"];
+    for(NSString *cn in classes){
+        Class c=NSClassFromString(cn);if(!c){MTLog(@"[DIRECTACT] class %@ missing",cn);continue;}
+        unsigned int mc=0;Method*m=class_copyMethodList(c,&mc);
+        for(unsigned int i=0;i<mc;i++){
+            NSString*sn=NSStringFromSelector(method_getName(m[i]));
+            if([sn localizedCaseInsensitiveContainsString:@"update"]||
+               [sn localizedCaseInsensitiveContainsString:@"activate"]||
+               [sn localizedCaseInsensitiveContainsString:@"foreground"]||
+               [sn localizedCaseInsensitiveContainsString:@"settings"]||
+               [sn localizedCaseInsensitiveContainsString:@"display"]||
+               [sn localizedCaseInsensitiveContainsString:@"frame"]||
+               [sn localizedCaseInsensitiveContainsString:@"parameter"]||
+               [sn localizedCaseInsensitiveContainsString:@"init"])
+                MTLog(@"[DIRECTACT-METHOD] %@ -%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
         }free(m);
     }
 }
