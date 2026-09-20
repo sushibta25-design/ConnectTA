@@ -234,7 +234,7 @@ static void MTProbeLaunchInfoClass(void){
         free(m);
     }
 }
-static void MTDumpSceneInternals(id controller){
+static void __attribute__((used)) MTDumpSceneInternals(id controller){
     if(!controller)return;
     id scene=MTV(controller,@"scene");
     id update=MTV(controller,@"currentSceneUpdate");
