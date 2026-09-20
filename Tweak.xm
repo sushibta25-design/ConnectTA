@@ -7,6 +7,7 @@ static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
+static void MTBuildDirectDefinitionProbe(void);
 static void MTProbeDirectSceneObjects(void);
 static void MTProbeDirectSceneInputs(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
@@ -179,6 +180,7 @@ static void MTTryBuildYouTubeAppInfo(void){
         gYTAppInfo=info;
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
         MTProbeRealYouTubeIdentity();
+        MTBuildDirectDefinitionProbe();
         MTProbeDirectSceneObjects();
         MTProbeDirectSceneInputs();
         MTValidateYouTubeInDashboard();
@@ -386,6 +388,26 @@ static void MTProbeDirectSceneObjects(void){
         for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
         free(m);
     }
+}
+static void MTBuildDirectDefinitionProbe(void){
+    if(!gYTAppInfo){MTLog(@"[DIRECTDEF] appInfo missing");return;}
+    id proc=MTV(gYTAppInfo,@"processIdentity");
+    Class dc=NSClassFromString(@"FBSSceneDefinition");
+    Class ic=NSClassFromString(@"FBSSceneIdentity");
+    Class sc=NSClassFromString(@"UIApplicationStarkSceneSpecification");
+    if(!proc||!dc||!ic||!sc){MTLog(@"[DIRECTDEF] missing proc=%@ def=%@ ident=%@ spec=%@",proc,dc,ic,sc);return;}
+    @try{
+        id def=((id(*)(id,SEL))objc_msgSend)(dc,NSSelectorFromString(@"definition"));
+        NSString *sid=@"MiniTa.Direct.com.google.ios.youtube";
+        id ident=((id(*)(id,SEL,id,id))objc_msgSend)(ic,NSSelectorFromString(@"identityForIdentifier:workspaceIdentifier:"),sid,@"kDBAppWorkspaceIdentifier");
+        id spec=[[sc alloc] init];
+        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setIdentity:"),ident);
+        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setClientIdentity:"),proc);
+        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setSpecification:"),spec);
+        MTLog(@"[DIRECTDEF] def=%@ valid=%@ identity=%@ client=%@ spec=%@ settingsClass=%@ clientSettingsClass=%@",
+              def,MTV(def,@"isValid"),MTV(def,@"identity"),MTV(def,@"clientIdentity"),MTV(def,@"specification"),
+              MTV(spec,@"settingsClass"),MTV(spec,@"clientSettingsClass"));
+    }@catch(NSException *e){MTLog(@"[DIRECTDEF] ERROR %@ %@",e.name,e.reason);}
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
