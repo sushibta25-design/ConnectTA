@@ -414,18 +414,19 @@ static void MTBuildDirectDefinitionProbe(void){
 static BOOL gDidCreateDirectYT=NO;
 static void MTTryCreateDirectYouTubeScene(void){
     if(gDidCreateDirectYT||!gYTAppInfo)return;
-    id proc=MTV(gYTAppInfo,@"processIdentity");
+    id client=MTV(gYTAppInfo,@"applicationIdentity");
     Class dc=NSClassFromString(@"FBSSceneDefinition"),ic=NSClassFromString(@"FBSSceneIdentity");
     Class sc=NSClassFromString(@"UIApplicationStarkSceneSpecification"),mc=NSClassFromString(@"FBSceneManager");
-    if(!proc||!dc||!ic||!sc||!mc){MTLog(@"[DIRECTCREATE] prerequisites missing");return;}
+    if(!client||!dc||!ic||!sc||!mc){MTLog(@"[DIRECTCREATE] prerequisites missing client=%@",client);return;}
     @try{
         id def=((id(*)(id,SEL))objc_msgSend)(dc,NSSelectorFromString(@"definition"));
         NSString *sid=@"MiniTa.Direct.com.google.ios.youtube";
         id ident=((id(*)(id,SEL,id,id))objc_msgSend)(ic,NSSelectorFromString(@"identityForIdentifier:workspaceIdentifier:"),sid,@"kDBAppWorkspaceIdentifier");
         id spec=[[sc alloc] init];
         ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setIdentity:"),ident);
-        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setClientIdentity:"),proc);
+        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setClientIdentity:"),client);
         ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setSpecification:"),spec);
+        MTLog(@"[DIRECTCREATE] client=%@ class=%@",client,NSStringFromClass([client class]));
         BOOL valid=((BOOL(*)(id,SEL))objc_msgSend)(def,NSSelectorFromString(@"isValid"));
         MTLog(@"[DIRECTCREATE] definition valid=%d def=%@",valid,def);
         if(!valid)return;
