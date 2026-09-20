@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <objc/message.h>
+#import <objc/runtime.h>
 
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
@@ -28,9 +29,9 @@ static void MTHostYouTube(void){
 }
 %hook DBApplicationSceneViewController
 - (void)foregroundSceneWithSettings:(id)settings completion:(id)completion{
- NSString*sid=MTV(self,@"sceneID");NSString*b=MTBundleFromSID(sid);
+ NSString*sid=MTV((id)self,@"sceneID");NSString*b=MTBundleFromSID(sid);
  if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
-   gYTController=self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass([self class]),settings[@"DBActivationSettingLaunchSource"]);
+   gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHostYouTube();});
  }
  %orig;
