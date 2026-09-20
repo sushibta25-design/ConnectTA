@@ -7,6 +7,7 @@ static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
+static void MTProbeValidClientIdentity(void);
 static void MTBuildDirectDefinitionProbe(void);
 static void MTTryCreateDirectYouTubeScene(void);
 static void MTProbeDirectSceneObjects(void);
@@ -181,6 +182,7 @@ static void MTTryBuildYouTubeAppInfo(void){
         gYTAppInfo=info;
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
         MTProbeRealYouTubeIdentity();
+        MTProbeValidClientIdentity();
         MTBuildDirectDefinitionProbe();
         MTTryCreateDirectYouTubeScene();
         MTProbeDirectSceneObjects();
@@ -439,6 +441,38 @@ static void MTTryCreateDirectYouTubeScene(void){
             MTLog(@"[DIRECTCREATE] after scene=%@ clientProcess=%@ definition=%@",again,MTV(again,@"clientProcess"),MTV(again,@"definition"));
         });
     }@catch(NSException *e){MTLog(@"[DIRECTCREATE] ERROR %@ %@",e.name,e.reason);gDidCreateDirectYT=NO;}
+}
+static void MTProbeValidClientIdentity(void){
+    if(!gYTAppInfo)return;
+    id proc=MTV(gYTAppInfo,@"processIdentity");
+    id app=MTV(gYTAppInfo,@"applicationIdentity");
+    NSArray *objs=@[proc?:[NSNull null],app?:[NSNull null]];
+    for(id o in objs){
+        if(o==(id)[NSNull null])continue;
+        Class c=[o class];
+        MTLog(@"[CID] object=%@ class=%@",o,NSStringFromClass(c));
+        for(Class k=c;k;k=class_getSuperclass(k)){
+            MTLog(@"[CID] chain=%@ isValid=%d",NSStringFromClass(k),[k instancesRespondToSelector:NSSelectorFromString(@"isValid")]);
+        }
+    }
+    NSArray *names=@[@"FBProcessIdentity",@"FBApplicationProcessIdentity",@"FBSProcessIdentity",@"FBSApplicationIdentity",@"BSProcessIdentity",@"RBSProcessIdentity"];
+    for(NSString *cn in names){
+        Class c=NSClassFromString(cn);
+        MTLog(@"[CIDCLASS] %@=%@ isValid=%d",cn,c,[c instancesRespondToSelector:NSSelectorFromString(@"isValid")]);
+        if(!c)continue;
+        unsigned int mc=0;Method*m=class_copyMethodList(c,&mc);
+        for(unsigned int i=0;i<mc;i++){
+            NSString*sn=NSStringFromSelector(method_getName(m[i]));
+            if([sn localizedCaseInsensitiveContainsString:@"init"]||[sn localizedCaseInsensitiveContainsString:@"identity"]||[sn localizedCaseInsensitiveContainsString:@"process"]||[sn localizedCaseInsensitiveContainsString:@"application"])
+                MTLog(@"[CIDMETHOD] %@ -%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
+        }free(m);
+        Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
+        for(unsigned int i=0;i<mc;i++){
+            NSString*sn=NSStringFromSelector(method_getName(m[i]));
+            if([sn localizedCaseInsensitiveContainsString:@"identity"]||[sn localizedCaseInsensitiveContainsString:@"process"]||[sn localizedCaseInsensitiveContainsString:@"application"])
+                MTLog(@"[CIDMETHOD] %@ +%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
+        }free(m);
+    }
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
