@@ -7,6 +7,7 @@ static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
+static void MTProbeDirectSceneObjects(void);
 static void MTProbeDirectSceneInputs(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
 static void MTLog(NSString *fmt,...){va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
@@ -178,6 +179,7 @@ static void MTTryBuildYouTubeAppInfo(void){
         gYTAppInfo=info;
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
         MTProbeRealYouTubeIdentity();
+        MTProbeDirectSceneObjects();
         MTProbeDirectSceneInputs();
         MTValidateYouTubeInDashboard();
     }@catch(NSException*e){MTLog(@"[BUILD] ERROR %@ %@",e.name,e.reason);}
@@ -359,6 +361,29 @@ static void MTProbeDirectSceneInputs(void){
     if(mgr){
         Class meta=object_getClass(mgr);unsigned int mc=0;Method *m=class_copyMethodList(meta,&mc);
         for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-MGR] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+        free(m);
+    }
+}
+static void MTProbeDirectSceneObjects(void){
+    if(!gYTAppInfo)return;
+    id proc=MTV(gYTAppInfo,@"processIdentity");
+    Class def=NSClassFromString(@"FBSSceneDefinition");
+    Class ident=NSClassFromString(@"FBSSceneIdentity");
+    Class spec=NSClassFromString(@"UIApplicationSceneSpecification");
+    MTLog(@"[DIRECT2] processIdentity=%@ def=%@ ident=%@ spec=%@",proc,def,ident,spec);
+    if(spec){
+        id o=nil;
+        @try{o=[spec new];} @catch(NSException *e){MTLog(@"[DIRECT2] spec new ERROR %@ %@",e.name,e.reason);}
+        MTLog(@"[DIRECT2] specObject=%@ settingsClass=%@ clientSettingsClass=%@",o,
+              o?((id(*)(id,SEL))objc_msgSend)(o,NSSelectorFromString(@"settingsClass")):nil,
+              o?((id(*)(id,SEL))objc_msgSend)(o,NSSelectorFromString(@"clientSettingsClass")):nil);
+    }
+    if(def){
+        unsigned int mc=0;Method *m=class_copyMethodList(def,&mc);
+        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] -%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+        free(m);
+        Class meta=object_getClass(def);mc=0;m=class_copyMethodList(meta,&mc);
+        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
         free(m);
     }
 }
