@@ -652,7 +652,7 @@ static void MTTryLaunchYouTubeProcess(void){
         }else MTLog(@"[PROCSTART] begin selector missing");
     }@catch(NSException *e){MTLog(@"[PROCSTART] ERROR %@ %@",e.name,e.reason);}
 }
-static void MTTryKnownCarPlayActivation(void){
+static void __attribute__((unused)) MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
     MTProbeDBApplicationInfo();
@@ -675,7 +675,7 @@ static void MTTryKnownCarPlayActivation(void){
     }
 }
 
-static void MTHybridRequestYouTubeLaunch(void){
+static void __attribute__((unused)) MTHybridRequestYouTubeLaunch(void){
     MTLog(@"[HYBRID-LAUNCH] AUTO-LAUNCH DISABLED"); return;
     Class proxy=NSClassFromString(@"LSApplicationProxy");
     Class info=NSClassFromString(@"DBApplicationInfo");
