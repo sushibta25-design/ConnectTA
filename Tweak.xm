@@ -72,6 +72,10 @@ static void MTProbeDBSceneController(void){
     if(!c){MTLog(@"[DBSCENE] class missing");return;}
     MTLog(@"[DBSCENE] class present superclass=%@",NSStringFromClass(class_getSuperclass(c)));
     MTDumpMethods(c,@"DBApplicationSceneViewController");
+    unsigned int mc=0;Method *allm=class_copyMethodList(c,&mc);
+    MTLog(@"[DBSCENE] methodCount=%u",mc);
+    for(unsigned int i=0;i<mc;i++) MTLog(@"[DB-METHOD] -%@ types=%s",NSStringFromSelector(method_getName(allm[i])),method_getTypeEncoding(allm[i]));
+    free(allm);
     unsigned int count=0;Ivar *ivars=class_copyIvarList(c,&count);
     for(unsigned int i=0;i<count;i++){
         const char *n=ivar_getName(ivars[i]);const char *t=ivar_getTypeEncoding(ivars[i]);
