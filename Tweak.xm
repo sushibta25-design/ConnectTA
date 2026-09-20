@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
+static id gMTHybridNativeLaunchArg=nil;
 static __weak id gMTHybridDashboard=nil;
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil; static id gDirectYTScene=nil;
 static void MTValidateYouTubeInDashboard(void);
@@ -739,8 +740,7 @@ static void MTHybridRefreshRosterAndActivate(void){
         if(dash){
             SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
             if([dash respondsToSelector:pre])MTLog(@"[HYBRID-ROSTER] preflight=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(dash,pre,ai));
-            MTLog(@"[HYBRID-ROSTER] invoking live Dashboard launch with DBApplicationInfo");
-            ((void(*)(id,SEL,id,id))objc_msgSend)(dash,NSSelectorFromString(@"_launchAppWithInfo:forURL:"),ai,nil);
+            MTLog(@"[HYBRID-ROSTER] DBApplicationInfo is not launchInfo; waiting to capture native launch contract. sample=%@",gMTHybridNativeLaunchArg);
         }
     }@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] ERROR %@ %@",e.name,e.reason);}
 }
@@ -843,6 +843,12 @@ static void MTHybridInstallAppBridge(void){
     %orig;
     static BOOL once=NO;if(once)return;once=YES;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHybridRefreshRosterAndActivate();});
+}
+
+- (void)_launchAppWithInfo:(id)info forURL:(id)url {
+    MTLog(@"[HYBRID-CONTRACT] native launch arg=%@ class=%@ application=%@ appClass=%@",info,NSStringFromClass([info class]),MTV(info,@"application"),NSStringFromClass([MTV(info,@"application") class]));
+    gMTHybridNativeLaunchArg=info;
+    %orig;
 }
 %end
 %hook DBApplicationSceneViewController
