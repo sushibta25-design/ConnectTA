@@ -714,27 +714,45 @@ static void MTHybridInstallWorkspaceCapture(void){
 }
 
 static void MTHybridRefreshRosterAndActivate(void){
-    NSArray *names=@[@"CARApplication",@"DBApplication",@"DBApplicationController",@"CRCarPlayAppDeclaration",@"CARApplicationInfo",@"DBApplicationInfo"];
-    for(NSString *cn in names){
-        Class c=NSClassFromString(cn);
-        MTLog(@"[HYBRID-ROSTER] class %@=%@",cn,c);
-        if(!c)continue;
-        unsigned int mc=0;Method *ms=class_copyMethodList(object_getClass(c),&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString*n=NSStringFromSelector(method_getName(ms[i]));NSString*l=n.lowercaseString;
-            if([l containsString:@"application"]||[l containsString:@"installed"]||[l containsString:@"shared"]||[l containsString:@"library"])
-                MTLog(@"[HYBRID-ROSTER-METHOD] %@ +%@ types=%s",cn,n,method_getTypeEncoding(ms[i]));
-        }free(ms);
-        mc=0;ms=class_copyMethodList(c,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString*n=NSStringFromSelector(method_getName(ms[i]));NSString*l=n.lowercaseString;
-            if([l containsString:@"application"]||[l containsString:@"bundle"]||[l containsString:@"library"])
-                MTLog(@"[HYBRID-ROSTER-METHOD] %@ -%@ types=%s",cn,n,method_getTypeEncoding(ms[i]));
-        }free(ms);
-    }
-    // Also inspect the live dashboard for any app-library object it already owns.
-    UIWindowScene *ws=nil;for(UIScene *sc in UIApplication.sharedApplication.connectedScenes)if([sc isKindOfClass:UIWindowScene.class]){NSString*sid=sc.session.persistentIdentifier?:@"";if([sid containsString:@"DBDashboard-Car"]){ws=(UIWindowScene*)sc;break;}}
-    MTLog(@"[HYBRID-ROSTER] dashboardWindowScene=%@",ws);
+    Class info=NSClassFromString(@"DBApplicationInfo");
+    Class proxy=NSClassFromString(@"LSApplicationProxy");
+    if(!info||!proxy){MTLog(@"[HYBRID-ROSTER] prerequisites info=%@ proxy=%@",info,proxy);return;}
+    @try{
+        id p=((id(*)(id,SEL,id))objc_msgSend)(proxy,NSSelectorFromString(@"applicationProxyForIdentifier:"),@"com.google.ios.youtube");
+        MTLog(@"[HYBRID-ROSTER] proxy=%@",p);
+        id ai=nil;
+        for(NSString *name in @[@"initWithApplicationProxy:",@"initWithApplicationProxy:carPlayDeclaration:"]){
+            SEL sel=NSSelectorFromString(name);if(![[info alloc] respondsToSelector:sel])continue;
+            if([name containsString:@"carPlayDeclaration"]){
+                Class dc=NSClassFromString(@"CRCarPlayAppDeclaration");id d=dc?[dc new]:nil;
+                if([d respondsToSelector:NSSelectorFromString(@"setSupportsTemplates:")])((void(*)(id,SEL,BOOL))objc_msgSend)(d,NSSelectorFromString(@"setSupportsTemplates:"),NO);
+                if([d respondsToSelector:NSSelectorFromString(@"setSupportsMaps:")])((void(*)(id,SEL,BOOL))objc_msgSend)(d,NSSelectorFromString(@"setSupportsMaps:"),YES);
+                if([d respondsToSelector:NSSelectorFromString(@"setBundleIdentifier:")])((void(*)(id,SEL,id))objc_msgSend)(d,NSSelectorFromString(@"setBundleIdentifier:"),@"com.google.ios.youtube");
+                ai=((id(*)(id,SEL,id,id))objc_msgSend)([info alloc],sel,p,d);
+            }else ai=((id(*)(id,SEL,id))objc_msgSend)([info alloc],sel,p);
+            if(ai){MTLog(@"[HYBRID-ROSTER] built appInfo via %@ => %@",name,ai);break;}
+        }
+        if(!ai)return;
+        id dash=nil;
+        for(UIScene *sc in UIApplication.sharedApplication.connectedScenes){
+            if([sc isKindOfClass:UIWindowScene.class]&&[sc.session.persistentIdentifier containsString:@"DBDashboard-Car"]){
+                for(UIWindow *w in ((UIWindowScene*)sc).windows){
+                    id vc=w.rootViewController;
+                    // Walk common containment until an object exposes _launchAppWithInfo:forURL:.
+                    NSMutableArray *q=[NSMutableArray array];if(vc)[q addObject:vc];
+                    while(q.count){id x=q.firstObject;[q removeObjectAtIndex:0];if([x respondsToSelector:NSSelectorFromString(@"_launchAppWithInfo:forURL:")]){dash=x;break;}if([x respondsToSelector:@selector(childViewControllers)])[q addObjectsFromArray:[x childViewControllers]];}
+                    if(dash)break;
+                }
+            }if(dash)break;
+        }
+        MTLog(@"[HYBRID-ROSTER] live launch owner=%@",dash);
+        if(dash){
+            SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
+            if([dash respondsToSelector:pre])MTLog(@"[HYBRID-ROSTER] preflight=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(dash,pre,ai));
+            MTLog(@"[HYBRID-ROSTER] invoking live Dashboard launch with DBApplicationInfo");
+            ((void(*)(id,SEL,id,id))objc_msgSend)(dash,NSSelectorFromString(@"_launchAppWithInfo:forURL:"),ai,nil);
+        }
+    }@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] ERROR %@ %@",e.name,e.reason);}
 }
 #pragma mark - MiniTa hybrid bridge (DuoPhone host + CarSurf-style role bridge)
 
