@@ -607,7 +607,7 @@ static void MTProbeClientProviderPath(void){
     }
 }
 static void MTProbeProcessLaunchContext(void){
-    NSArray *names=@[@"FBProcessExecutionContext",@"FBApplicationProcessExecutionContext",@"RBSLaunchContext",@"RBSProcessIdentity","FBApplicationProcessLaunchTransaction"];
+    NSArray *names=@[@"FBProcessExecutionContext",@"FBApplicationProcessExecutionContext",@"RBSLaunchContext",@"RBSProcessIdentity",@"FBApplicationProcessLaunchTransaction"];
     for(NSString *cn in names){
         Class c=NSClassFromString(cn);if(!c){MTLog(@"[EXECCTX] %@ missing",cn);continue;}
         MTLog(@"[EXECCTX] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
