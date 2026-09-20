@@ -18,7 +18,7 @@ static void MTTryActivateDirectYouTubeScene(id scene);
 static void MTProbeDirectSceneObjects(void);
 static void MTProbeDirectSceneInputs(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
-static void MTLog(NSString *fmt,...){va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
+static void MTLog(NSString *fmt,...){static unsigned long long written=0;if(written>262144)return;va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];written+=d.length;NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
 static id MTV(id o,NSString*k){@try{return[o valueForKey:k];}@catch(__unused NSException*e){return nil;}}
 static NSString *MTBundleFromSID(NSString *sid){if(![sid isKindOfClass:NSString.class])return nil;for(NSString*p in [sid componentsSeparatedByString:@":"])if([p isEqualToString:@"com.google.ios.youtube"])return p;return nil;}
 static UIWindowScene *MTCarScene(void){for(UIScene*s in UIApplication.sharedApplication.connectedScenes)if([s isKindOfClass:UIWindowScene.class]){UIWindowScene*w=(UIWindowScene*)s;CGSize z=w.coordinateSpace.bounds.size;if(z.width>300&&z.height<=500)return w;}return nil;}
@@ -45,12 +45,26 @@ static void MTDumpMethods(Class c, NSString *name){
     unsigned int count=0;Method *methods=class_copyMethodList(c,&count);
     for(unsigned int i=0;i<count;i++){
         SEL sel=method_getName(methods[i]);NSString *sn=NSStringFromSelector(sel);
-        if([sn localizedCaseInsensitiveContainsString:@"activ"]||[sn localizedCaseInsensitiveContainsString:@"launch"]||[sn localizedCaseInsensitiveContainsString:@"application"]||[sn localizedCaseInsensitiveContainsString:@"scene"]||[sn localizedCaseInsensitiveContainsString:@"carplay"]||[sn localizedCaseInsensitiveContainsString:@"foreground"]){ /* quiet */ }
+        if([sn localizedCaseInsensitiveContainsString:@"activ"]||
+           [sn localizedCaseInsensitiveContainsString:@"launch"]||
+           [sn localizedCaseInsensitiveContainsString:@"application"]||
+           [sn localizedCaseInsensitiveContainsString:@"scene"]||
+           [sn localizedCaseInsensitiveContainsString:@"carplay"]||
+           [sn localizedCaseInsensitiveContainsString:@"foreground"])
+            MTLog(@"[ACT-METHOD] %@ -%@ types=%s",name,sn,method_getTypeEncoding(methods[i]));
+    }
     free(methods);
     Class meta=object_getClass(c);count=0;methods=class_copyMethodList(meta,&count);
     for(unsigned int i=0;i<count;i++){
         SEL sel=method_getName(methods[i]);NSString *sn=NSStringFromSelector(sel);
-        if([sn localizedCaseInsensitiveContainsString:@"activ"]||[sn localizedCaseInsensitiveContainsString:@"launch"]||[sn localizedCaseInsensitiveContainsString:@"application"]||[sn localizedCaseInsensitiveContainsString:@"scene"]||[sn localizedCaseInsensitiveContainsString:@"carplay"]||[sn localizedCaseInsensitiveContainsString:@"shared"]){ /* quiet */ }
+        if([sn localizedCaseInsensitiveContainsString:@"activ"]||
+           [sn localizedCaseInsensitiveContainsString:@"launch"]||
+           [sn localizedCaseInsensitiveContainsString:@"application"]||
+           [sn localizedCaseInsensitiveContainsString:@"scene"]||
+           [sn localizedCaseInsensitiveContainsString:@"carplay"]||
+           [sn localizedCaseInsensitiveContainsString:@"shared"])
+            MTLog(@"[ACT-METHOD] %@ +%@ types=%s",name,sn,method_getTypeEncoding(methods[i]));
+    }
     free(methods);
 }
 static void MTProbeActivationServices(void){
@@ -184,11 +198,13 @@ static void MTTryBuildYouTubeAppInfo(void){
 }
 static void MTProbeControllerEnvironment(id controller, NSString *sid){
     if(!controller)return;
+    id env=MTV(controller,@"environment"); if(env && [NSStringFromClass([env class]) isEqualToString:@"DBDashboard"]) { gDashboardEnv=env; gMTHybridDashboard=env; MTLog(@"[HYBRID-DASH] captured live dashboard=%@",env); }
     id realScene=MTV(controller,@"scene");
     id realSettings=MTV(realScene,@"settings");
     id dc=MTV(realSettings,@"displayConfiguration");
     if(dc) {
         gCarDisplayConfig=dc;
+        MTLog(@"[DIRECTGO] captured CarPlay display=%@",dc);
         if(gDirectYTScene && !MTV(gDirectYTScene,@"clientProcess")){
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.25*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
                 MTLog(@"[DIRECTGO] retry after display capture");
@@ -198,6 +214,7 @@ static void MTProbeControllerEnvironment(id controller, NSString *sid){
     }
 
     id req=MTV(controller,@"requester");
+    MTLog(@"[ENV] sid=%@ controller=%@ environment=%@ envClass=%@ requester=%@ requesterClass=%@",
           sid,NSStringFromClass([controller class]),env,NSStringFromClass([env class]),req,NSStringFromClass([req class]));
     if(env)MTDumpMethods([env class],[NSString stringWithFormat:@"ENV:%@",NSStringFromClass([env class])]);
     MTValidateYouTubeInDashboard();
