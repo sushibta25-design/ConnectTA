@@ -100,9 +100,21 @@ static void MTProbeDBSceneController(void){
     }
     free(props);
 }
+static void MTProbeDBApplicationInfo(void){
+    Class c=NSClassFromString(@"DBApplicationInfo");
+    if(!c){MTLog(@"[APPINFO] class missing");return;}
+    MTLog(@"[APPINFO] class present superclass=%@",NSStringFromClass(class_getSuperclass(c)));
+    unsigned int mc=0;Method *m=class_copyMethodList(c,&mc);
+    for(unsigned int i=0;i<mc;i++)MTLog(@"[APPINFO-METHOD] -%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+    free(m);
+    Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
+    for(unsigned int i=0;i<mc;i++)MTLog(@"[APPINFO-METHOD] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
+    free(m);
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
+    MTProbeDBApplicationInfo();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
     id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
     if(!svc)return;
