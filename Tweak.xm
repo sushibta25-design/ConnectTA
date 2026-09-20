@@ -896,6 +896,7 @@ static void MTHybridInstallAppBridge(void){
  NSString*sid=MTV((id)self,@"sceneID"); MTProbeControllerEnvironment((id)self,sid); NSString*b=MTBundleFromSID(sid);
  if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
    gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
+    id env=gMTHybridDashboard; id ai=nil; @try{ai=((id(*)(id,SEL,id))objc_msgSend)(env,NSSelectorFromString(@"applicationInfoForScene:"),MTV((id)self,@"scene"));}@catch(__unused NSException*e){} MTLog(@"[FG-B] dashboard=%@ appInfoForScene=%@",env,ai); dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.25*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ MTHostYouTube(); });
    static BOOL mtDidDumpScene=NO; if(!mtDidDumpScene){mtDidDumpScene=YES;dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTDumpSceneInternals((id)self);});}
    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHostYouTube();});
  }
