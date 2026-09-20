@@ -27,6 +27,32 @@ static void MTHostYouTube(void){
    });
  }@catch(NSException*e){MTLog(@"[HOST] ERROR %@ %@",e.name,e.reason);}
 }
+
+static void MTProbeActivationServices(void){
+    NSArray *classes=@[@"SBSApplicationCarPlayService",@"SBApplicationController",@"DBApplicationInfoCache",@"DBApplicationLaunchService",@"DBProcessMonitor"];
+    NSArray *sels=@[@"sharedInstance",@"sharedService",@"service",@"defaultService",@"applicationWithBundleIdentifier:",@"applicationForBundleIdentifier:",
+                    @"requestActivationForBundleIdentifier:",@"activateApplication:",@"launchApplication:",@"openApplication:"];
+    for(NSString *cn in classes){
+        Class c=NSClassFromString(cn);if(!c){MTLog(@"[ACT-PROBE] class %@ missing",cn);continue;}
+        MTLog(@"[ACT-PROBE] class %@ present",cn);
+        id obj=nil;
+        for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{obj=((id(*)(id,SEL))objc_msgSend)(c,sel);MTLog(@"[ACT-PROBE] %@ +%@ -> %@",cn,ss,obj);if(obj)break;}@catch(NSException*e){MTLog(@"[ACT-PROBE] %@ +%@ error=%@",cn,ss,e.name);}}}
+        id target=obj?:c;
+        for(NSString *ss in sels){SEL sel=NSSelectorFromString(ss);if([target respondsToSelector:sel])MTLog(@"[ACT-PROBE] %@ responds %@",cn,ss);}
+    }
+}
+static void MTTryKnownCarPlayActivation(void){
+    MTProbeActivationServices();
+    Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
+    id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
+    if(!svc)return;
+    NSString *bundle=@"com.google.ios.youtube";
+    for(NSString *ss in @[@"requestActivationForBundleIdentifier:",@"activateApplication:",@"launchApplication:",@"openApplication:"]){
+        SEL sel=NSSelectorFromString(ss);if(![svc respondsToSelector:sel])continue;
+        @try{MTLog(@"[ACT] trying %@ %@",ss,bundle);((void(*)(id,SEL,id))objc_msgSend)(svc,sel,bundle);return;}
+        @catch(NSException*e){MTLog(@"[ACT] %@ error %@ %@",ss,e.name,e.reason);}
+    }
+}
 %hook DBApplicationSceneViewController
 - (void)foregroundSceneWithSettings:(id)settings completion:(id)completion{
  NSString*sid=MTV((id)self,@"sceneID");NSString*b=MTBundleFromSID(sid);
@@ -37,4 +63,5 @@ static void MTHostYouTube(void){
  %orig;
 }
 %end
-%ctor{@autoreleasepool{[[NSFileManager defaultManager]removeItemAtPath:MTLogPath error:nil];MTLog(@"=== MINITA PHASE2 YOUTUBE HOST === bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName);}}
+%ctor{@autoreleasepool{[[NSFileManager defaultManager]removeItemAtPath:MTLogPath error:nil];MTLog(@"=== MINITA PHASE3 YOUTUBE ACTIVATION === bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName);
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryKnownCarPlayActivation();});}}
