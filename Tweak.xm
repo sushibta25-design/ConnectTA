@@ -4,7 +4,7 @@
 #import <objc/runtime.h>
 
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
-static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
+static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
 static void MTLog(NSString *fmt,...){va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
 static id MTV(id o,NSString*k){@try{return[o valueForKey:k];}@catch(__unused NSException*e){return nil;}}
 static NSString *MTBundleFromSID(NSString *sid){if(![sid isKindOfClass:NSString.class])return nil;for(NSString*p in [sid componentsSeparatedByString:@":"])if([p isEqualToString:@"com.google.ios.youtube"])return p;return nil;}
@@ -173,15 +173,30 @@ static void MTTryBuildYouTubeAppInfo(void){
         if([info respondsToSelector:NSSelectorFromString(@"setCBBridged:")])((void(*)(id,SEL,BOOL))objc_msgSend)(info,NSSelectorFromString(@"setCBBridged:"),YES);
         gYTAppInfo=info;
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
+        MTValidateYouTubeInDashboard();
     }@catch(NSException*e){MTLog(@"[BUILD] ERROR %@ %@",e.name,e.reason);}
 }
 static void MTProbeControllerEnvironment(id controller, NSString *sid){
     if(!controller)return;
-    id env=MTV(controller,@"environment");
+    id env=MTV(controller,@"environment"); if(env && [NSStringFromClass([env class]) isEqualToString:@"DBDashboard"]) gDashboardEnv=env;
     id req=MTV(controller,@"requester");
     MTLog(@"[ENV] sid=%@ controller=%@ environment=%@ envClass=%@ requester=%@ requesterClass=%@",
           sid,NSStringFromClass([controller class]),env,NSStringFromClass([env class]),req,NSStringFromClass([req class]));
     if(env)MTDumpMethods([env class],[NSString stringWithFormat:@"ENV:%@",NSStringFromClass([env class])]);
+    MTValidateYouTubeInDashboard();
+}
+static void MTValidateYouTubeInDashboard(void){
+    if(!gYTAppInfo||!gDashboardEnv){MTLog(@"[DASH] waiting appInfo=%d env=%d",gYTAppInfo!=nil,gDashboardEnv!=nil);return;}
+    @try{
+        SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
+        SEL sid=NSSelectorFromString(@"sceneIdentifierForAppInfo:");
+        SEL frm=NSSelectorFromString(@"sceneFrameForAppInfo:");
+        SEL scene=NSSelectorFromString(@"sceneForAppInfo:");
+        if([gDashboardEnv respondsToSelector:pre]) MTLog(@"[DASH] preflightRequired=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,pre,gYTAppInfo));
+        if([gDashboardEnv respondsToSelector:sid]) MTLog(@"[DASH] sceneIdentifier=%@",((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,sid,gYTAppInfo));
+        if([gDashboardEnv respondsToSelector:frm]){CGRect r=((CGRect(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,frm,gYTAppInfo);MTLog(@"[DASH] sceneFrame=%@",NSStringFromCGRect(r));}
+        if([gDashboardEnv respondsToSelector:scene]) MTLog(@"[DASH] existingScene=%@",((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,scene,gYTAppInfo));
+    }@catch(NSException*e){MTLog(@"[DASH] ERROR %@ %@",e.name,e.reason);}
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
