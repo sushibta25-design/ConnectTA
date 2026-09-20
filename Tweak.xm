@@ -585,6 +585,27 @@ static void MTTryActivateDirectYouTubeScene(id scene){
         });
     }@catch(NSException *e){MTLog(@"[DIRECTGO] ERROR %@ %@",e.name,e.reason);}
 }
+static void MTProbeClientProviderPath(void){
+    NSArray *names=@[@"FBSceneClientProvider",@"FBApplicationSceneClientProvider",@"FBProcessManager",@"FBApplicationProcess",@"FBApplicationProcessLaunchTransaction",@"FBProcess"];
+    for(NSString *cn in names){
+        Class c=NSClassFromString(cn);if(!c){MTLog(@"[PROVIDER] %@ missing",cn);continue;}
+        MTLog(@"[PROVIDER] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
+        for(id target in @[c,object_getClass(c)]){
+            BOOL meta=(target==object_getClass(c));unsigned int mc=0;Method*m=class_copyMethodList(target,&mc);
+            for(unsigned int i=0;i<mc;i++){
+                NSString *sn=NSStringFromSelector(method_getName(m[i]));
+                if([sn localizedCaseInsensitiveContainsString:@"client"]||
+                   [sn localizedCaseInsensitiveContainsString:@"process"]||
+                   [sn localizedCaseInsensitiveContainsString:@"launch"]||
+                   [sn localizedCaseInsensitiveContainsString:@"provider"]||
+                   [sn localizedCaseInsensitiveContainsString:@"application"]||
+                   [sn localizedCaseInsensitiveContainsString:@"identity"]||
+                   [sn localizedCaseInsensitiveContainsString:@"init"])
+                    MTLog(@"[PROVIDER-METHOD] %@ %c%@ types=%s",cn,meta?'+':'-',sn,method_getTypeEncoding(m[i]));
+            }free(m);
+        }
+    }
+}
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
     MTProbeDBSceneController();
@@ -593,6 +614,7 @@ static void MTTryKnownCarPlayActivation(void){
     MTProbeApplicationProxy();
     MTProbeLaunchInfoClass();
     MTProbeSceneSpecificationClasses();
+    MTProbeClientProviderPath();
     MTProbeIdentityAndSpecFactories();
     MTTryBuildYouTubeAppInfo();
     Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
