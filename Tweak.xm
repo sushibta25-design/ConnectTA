@@ -51,7 +51,6 @@ static void MTDumpMethods(Class c, NSString *name){
            [sn localizedCaseInsensitiveContainsString:@"scene"]||
            [sn localizedCaseInsensitiveContainsString:@"carplay"]||
            [sn localizedCaseInsensitiveContainsString:@"foreground"])
-            MTLog(@"[ACT-METHOD] %@ -%@ types=%s",name,sn,method_getTypeEncoding(methods[i]));
     }
     free(methods);
     Class meta=object_getClass(c);count=0;methods=class_copyMethodList(meta,&count);
@@ -63,7 +62,6 @@ static void MTDumpMethods(Class c, NSString *name){
            [sn localizedCaseInsensitiveContainsString:@"scene"]||
            [sn localizedCaseInsensitiveContainsString:@"carplay"]||
            [sn localizedCaseInsensitiveContainsString:@"shared"])
-            MTLog(@"[ACT-METHOD] %@ +%@ types=%s",name,sn,method_getTypeEncoding(methods[i]));
     }
     free(methods);
 }
@@ -198,13 +196,11 @@ static void MTTryBuildYouTubeAppInfo(void){
 }
 static void MTProbeControllerEnvironment(id controller, NSString *sid){
     if(!controller)return;
-    id env=MTV(controller,@"environment"); if(env && [NSStringFromClass([env class]) isEqualToString:@"DBDashboard"]) { gDashboardEnv=env; gMTHybridDashboard=env; MTLog(@"[HYBRID-DASH] captured live dashboard=%@",env); }
     id realScene=MTV(controller,@"scene");
     id realSettings=MTV(realScene,@"settings");
     id dc=MTV(realSettings,@"displayConfiguration");
     if(dc) {
         gCarDisplayConfig=dc;
-        MTLog(@"[DIRECTGO] captured CarPlay display=%@",dc);
         if(gDirectYTScene && !MTV(gDirectYTScene,@"clientProcess")){
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.25*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
                 MTLog(@"[DIRECTGO] retry after display capture");
@@ -214,7 +210,6 @@ static void MTProbeControllerEnvironment(id controller, NSString *sid){
     }
 
     id req=MTV(controller,@"requester");
-    MTLog(@"[ENV] sid=%@ controller=%@ environment=%@ envClass=%@ requester=%@ requesterClass=%@",
           sid,NSStringFromClass([controller class]),env,NSStringFromClass([env class]),req,NSStringFromClass([req class]));
     if(env)MTDumpMethods([env class],[NSString stringWithFormat:@"ENV:%@",NSStringFromClass([env class])]);
     MTValidateYouTubeInDashboard();
