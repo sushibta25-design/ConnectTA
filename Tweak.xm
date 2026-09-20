@@ -852,6 +852,18 @@ static void MTHybridInstallAppBridge(void){
 }
 - (void)_handleOpenApplicationEvent:(id)event {
     MTLog(@"[HYBRID-OPEN] event=%@ class=%@",event,NSStringFromClass([event class]));
+    id ctx=MTV(event,@"context");
+    if(!ctx){@try{ctx=[event valueForKey:@"_context"];}@catch(__unused NSException*e){}}
+    if(ctx){
+        MTLog(@"[HYBRID-CONTEXT] value=%@ class=%@",ctx,NSStringFromClass([ctx class]));
+        for(NSString*k in @[@"application",@"applicationInfo",@"bundleIdentifier",@"URL",@"url",@"identifier",@"sourceApplication",@"targetApplication"]){
+            id v=MTV(ctx,k);if(v)MTLog(@"[HYBRID-CONTEXT] key=%@ value=%@ class=%@",k,v,NSStringFromClass([v class]));
+        }
+        static BOOL cd=NO;if(!cd){cd=YES;unsigned int mc2=0;Method*mm=class_copyMethodList([ctx class],&mc2);
+            for(unsigned int j=0;j<mc2;j++){NSString*n=NSStringFromSelector(method_getName(mm[j]));NSString*l=n.lowercaseString;
+                if([l containsString:@"application"]||[l containsString:@"bundle"]||[l containsString:@"identifier"]||[l containsString:@"url"]||[l hasPrefix:@"set"])
+                    MTLog(@"[HYBRID-CONTEXT-METHOD] -%@ types=%s",n,method_getTypeEncoding(mm[j]));}free(mm);}
+    }
     for(NSString *k in @[@"application",@"applicationInfo",@"launchInfo",@"bundleIdentifier",@"URL",@"url",@"source",@"type",@"name",@"payload",@"userInfo",@"value",@"identifier"]){
         id v=MTV(event,k);if(v)MTLog(@"[HYBRID-OPEN] key=%@ value=%@ class=%@",k,v,NSStringFromClass([v class]));
     }
@@ -860,7 +872,7 @@ static void MTHybridInstallAppBridge(void){
         BOOL hasObjectPayload=NO, hasWritableTarget=NO;
         for(unsigned int i=0;i<ic;i++){
             const char*n=ivar_getName(ivs[i]);const char*t=ivar_getTypeEncoding(ivs[i]);id v=nil;
-            @try{if(t&&t[0]=='@')v=object_getIvar(event,ivs[i]);}@catch(__unused NSException*e){}
+            /* raw object_getIvar disabled after v6 crash */
             if(t&&t[0]=='@'&&v)hasObjectPayload=YES;
             NSString *in=n?[NSString stringWithUTF8String:n]:@"";
             NSString *il=in.lowercaseString;
