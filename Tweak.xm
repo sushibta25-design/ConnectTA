@@ -555,6 +555,19 @@ static void MTTryActivateDirectYouTubeScene(id scene){
             };
             void (^done)(id)=^(id result){MTLog(@"[DIRECTGO] completion result=%@ process=%@ settings=%@",result,MTV(scene,@"clientProcess"),MTV(scene,@"settings"));};
             ((void(*)(id,SEL,id,id))objc_msgSend)(scene,act,cfg,done);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+                id cp=MTV(scene,@"clientProcess");
+                MTLog(@"[DIRECTGO] watchdog process=%@ settings=%@",cp,MTV(scene,@"settings"));
+                if(!cp){
+                    SEL ac2=NSSelectorFromString(@"activateWithTransitionContext:completion:");
+                    if([scene respondsToSelector:ac2]){
+                        MTLog(@"[DIRECTGO] watchdog fallback activateWithTransitionContext");
+                        ((void(*)(id,SEL,id,id))objc_msgSend)(scene,ac2,nil,^(id result){
+                            MTLog(@"[DIRECTGO] watchdog fallback completion=%@ process=%@ settings=%@",result,MTV(scene,@"clientProcess"),MTV(scene,@"settings"));
+                        });
+                    }
+                }
+            });
         }else{
             MTLog(@"[DIRECTGO] pb_activate selector missing");
         }
