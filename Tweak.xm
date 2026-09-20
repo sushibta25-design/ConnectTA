@@ -198,8 +198,17 @@ static void MTProbeControllerEnvironment(id controller, NSString *sid){
     id realScene=MTV(controller,@"scene");
     id realSettings=MTV(realScene,@"settings");
     id dc=MTV(realSettings,@"displayConfiguration");
-    if(dc) gCarDisplayConfig=dc;
-    if(gDirectYTScene && gCarDisplayConfig && !MTV(gDirectYTScene,@"clientProcess")) MTTryActivateDirectYouTubeScene(gDirectYTScene);
+    if(dc) {
+        gCarDisplayConfig=dc;
+        MTLog(@"[DIRECTGO] captured CarPlay display=%@",dc);
+        if(gDirectYTScene && !MTV(gDirectYTScene,@"clientProcess")){
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.25*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+                MTLog(@"[DIRECTGO] retry after display capture");
+                MTTryActivateDirectYouTubeScene(gDirectYTScene);
+            });
+        }
+    }
+
     id req=MTV(controller,@"requester");
     MTLog(@"[ENV] sid=%@ controller=%@ environment=%@ envClass=%@ requester=%@ requesterClass=%@",
           sid,NSStringFromClass([controller class]),env,NSStringFromClass([env class]),req,NSStringFromClass([req class]));
