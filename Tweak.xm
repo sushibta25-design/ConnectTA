@@ -674,6 +674,101 @@ static void MTTryKnownCarPlayActivation(void){
         @catch(NSException*e){MTLog(@"[ACT] %@ error %@ %@",ss,e.name,e.reason);}
     }
 }
+
+#pragma mark - MiniTa hybrid bridge (DuoPhone host + CarSurf-style role bridge)
+
+static BOOL MTHybridIsYTProxy(id proxy){
+    @try { id b=MTV(proxy,@"bundleIdentifier"); return [b isEqualToString:@"com.google.ios.youtube"]; }
+    @catch(__unused NSException *e){ return NO; }
+}
+static IMP mtOrigInfo=nil, mtOrigEnt2=nil, mtOrigEnt3=nil;
+static id MTHybridInfo(id self,SEL _cmd,NSString *key,Class expected){
+    id value=((id(*)(id,SEL,id,id))mtOrigInfo)(self,_cmd,key,expected);
+    if(!MTHybridIsYTProxy(self)) return value;
+    @try{
+        if([key isEqualToString:@"SBStarkLaunchModes"] && (!expected||expected==NSArray.class)){
+            MTLog(@"[HYBRID-ADMIT] SBStarkLaunchModes");
+            return value?:@[@"Default"];
+        }
+        if([key isEqualToString:@"UIApplicationSceneManifest"] && (!expected||expected==NSDictionary.class)){
+            NSDictionary *orig=[value isKindOfClass:NSDictionary.class]?value:nil;
+            NSMutableDictionary *manifest=orig?[orig mutableCopy]:[NSMutableDictionary dictionary];
+            NSDictionary *old=manifest[@"UISceneConfigurations"];
+            NSMutableDictionary *cfg=[old isKindOfClass:NSDictionary.class]?[old mutableCopy]:[NSMutableDictionary dictionary];
+            for(NSString *role in [cfg.allKeys copy]) if([role hasPrefix:@"CPTemplateApplication"]) [cfg removeObjectForKey:role];
+            if(!cfg[@"UIWindowSceneSessionRoleCarPlay"]) cfg[@"UIWindowSceneSessionRoleCarPlay"]=@[@{@"UISceneConfigurationName":@"MiniTa"}];
+            manifest[@"UISceneConfigurations"]=cfg;
+            manifest[@"UIApplicationSupportsMultipleScenes"]=@YES;
+            [manifest removeObjectForKey:@"CPSupportsDashboardNavigationScene"];
+            [manifest removeObjectForKey:@"CPSupportsInstrumentClusterNavigationScene"];
+            MTLog(@"[HYBRID-ADMIT] manifest roles=%@",cfg.allKeys);
+            return manifest;
+        }
+    }@catch(NSException *e){MTLog(@"[HYBRID-ADMIT] info error %@ %@",e.name,e.reason);}
+    return value;
+}
+static BOOL MTHybridCapability(NSString *key){
+    return [key isEqualToString:@"CARCapableApp"]||[key isEqualToString:@"SBStarkCapable"];
+}
+static BOOL MTHybridTemplateCapability(NSString *key){
+    return [key hasPrefix:@"com.apple.developer.carplay-"]||[key isEqualToString:@"com.apple.developer.playable-content"];
+}
+static id MTHybridEnt2(id self,SEL _cmd,NSString *key,Class expected){
+    id value=((id(*)(id,SEL,id,id))mtOrigEnt2)(self,_cmd,key,expected);
+    if(!MTHybridIsYTProxy(self)) return value;
+    if(MTHybridTemplateCapability(key)){MTLog(@"[HYBRID-ADMIT] hide entitlement %@",key);return nil;}
+    if(!value&&MTHybridCapability(key)&&(!expected||expected==NSNumber.class)){MTLog(@"[HYBRID-ADMIT] grant %@",key);return @YES;}
+    return value;
+}
+static id MTHybridEnt3(id self,SEL _cmd,NSString *key,Class expected,Class valuesExpected){
+    id value=((id(*)(id,SEL,id,id,id))mtOrigEnt3)(self,_cmd,key,expected,valuesExpected);
+    if(!MTHybridIsYTProxy(self)) return value;
+    if(MTHybridTemplateCapability(key)){MTLog(@"[HYBRID-ADMIT] hide entitlement %@",key);return nil;}
+    if(!value&&MTHybridCapability(key)&&(!expected||expected==NSNumber.class)){MTLog(@"[HYBRID-ADMIT] grant %@",key);return @YES;}
+    return value;
+}
+static void MTHybridInstallAdmission(void){
+    Class c=NSClassFromString(@"LSBundleProxy"); if(!c){MTLog(@"[HYBRID-ADMIT] LSBundleProxy missing");return;}
+    Method m=class_getInstanceMethod(c,NSSelectorFromString(@"objectForInfoDictionaryKey:ofClass:"));
+    if(m){mtOrigInfo=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridInfo);}
+    m=class_getInstanceMethod(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:"));
+    if(m){mtOrigEnt2=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridEnt2);}
+    m=class_getInstanceMethod(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:valuesOfClass:"));
+    if(m){mtOrigEnt3=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridEnt3);}
+    MTLog(@"[HYBRID-ADMIT] installed info=%d ent2=%d ent3=%d",mtOrigInfo!=nil,mtOrigEnt2!=nil,mtOrigEnt3!=nil);
+}
+
+static IMP mtOrigSceneConfigInit=nil,mtOrigSessionRole=nil,mtOrigSupportsMulti=nil;
+static BOOL MTHybridCarRole(NSString *r){return [r hasPrefix:@"CPTemplateApplicationSceneSessionRole"]||[r hasPrefix:@"UIWindowSceneSessionRoleCarPlay"];}
+static id MTHybridSceneConfigInit(id self,SEL _cmd,NSString *name,NSString *role){
+    if(MTHybridCarRole(role)){
+        MTLog(@"[HYBRID-APP] rewrite config role %@ -> %@",role,UIWindowSceneSessionRoleApplication);
+        id o=((id(*)(id,SEL,id,id))mtOrigSceneConfigInit)(self,_cmd,nil,UIWindowSceneSessionRoleApplication);
+        if([o respondsToSelector:@selector(setSceneClass:)]) ((void(*)(id,SEL,id))objc_msgSend)(o,@selector(setSceneClass:),UIWindowScene.class);
+        return o;
+    }
+    return ((id(*)(id,SEL,id,id))mtOrigSceneConfigInit)(self,_cmd,name,role);
+}
+static id MTHybridSessionRole(id self,SEL _cmd){
+    NSString *r=((id(*)(id,SEL))mtOrigSessionRole)(self,_cmd);
+    if(MTHybridCarRole(r)){MTLog(@"[HYBRID-APP] rewrite session role %@",r);return UIWindowSceneSessionRoleApplication;}
+    return r;
+}
+static BOOL MTHybridSupportsMulti(id self,SEL _cmd){(void)self;(void)_cmd;return YES;}
+static void MTHybridInstallAppBridge(void){
+    Method m=class_getInstanceMethod(UISceneConfiguration.class,@selector(initWithName:sessionRole:));
+    if(m){mtOrigSceneConfigInit=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSceneConfigInit);}
+    m=class_getInstanceMethod(UISceneSession.class,@selector(role));
+    if(m){mtOrigSessionRole=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSessionRole);}
+    Class manifest=NSClassFromString(@"UIApplicationSceneManifest");
+    m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
+    if(m){mtOrigSupportsMulti=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSupportsMulti);}
+    MTLog(@"[HYBRID-APP] installed config=%d role=%d multi=%d",mtOrigSceneConfigInit!=nil,mtOrigSessionRole!=nil,mtOrigSupportsMulti!=nil);
+    [[NSNotificationCenter defaultCenter] addObserverForName:UISceneDidActivateNotification object:nil queue:nil usingBlock:^(NSNotification *n){
+        UIScene *scene=n.object; NSString *sid=scene.session.persistentIdentifier?:@"";
+        MTLog(@"[HYBRID-APP] ACTIVATE sid=%@ role=%@ class=%@ screen=%@",sid,scene.session.role,NSStringFromClass(scene.class),[scene isKindOfClass:UIWindowScene.class]?((UIWindowScene*)scene).screen:nil);
+    }];
+}
 %hook DBApplicationSceneViewController
 - (void)foregroundSceneWithSettings:(id)settings completion:(id)completion{
  NSString*sid=MTV((id)self,@"sceneID"); MTProbeControllerEnvironment((id)self,sid); NSString*b=MTBundleFromSID(sid);
@@ -685,5 +780,16 @@ static void MTTryKnownCarPlayActivation(void){
  %orig;
 }
 %end
-%ctor{@autoreleasepool{[[NSFileManager defaultManager]removeItemAtPath:MTLogPath error:nil];MTLog(@"=== MINITA PHASE3 YOUTUBE ACTIVATION === bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName);
-dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryKnownCarPlayActivation();});}}
+%ctor{@autoreleasepool{
+    NSString *bundle=NSBundle.mainBundle.bundleIdentifier?:@"";
+    if([bundle isEqualToString:@"com.google.ios.youtube"]){
+        MTLog(@"=== MINITA HYBRID APP === bundle=%@ process=%@",bundle,NSProcessInfo.processInfo.processName);
+        MTHybridInstallAppBridge();
+        return;
+    }
+    if(![bundle isEqualToString:@"com.apple.CarPlayApp"]) return;
+    [[NSFileManager defaultManager]removeItemAtPath:MTLogPath error:nil];
+    MTLog(@"=== MINITA HYBRID CARPLAY === bundle=%@ process=%@",bundle,NSProcessInfo.processInfo.processName);
+    MTHybridInstallAdmission();
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryKnownCarPlayActivation();});
+}}
