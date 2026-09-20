@@ -850,6 +850,13 @@ static void MTHybridInstallAppBridge(void){
     gMTHybridNativeLaunchArg=info;
     %orig;
 }
+- (void)_handleOpenApplicationEvent:(id)event {
+    MTLog(@"[HYBRID-OPEN] event=%@ class=%@",event,NSStringFromClass([event class]));
+    for(NSString *k in @[@"application",@"applicationInfo",@"launchInfo",@"bundleIdentifier",@"URL",@"url",@"source"]){
+        id v=MTV(event,k);if(v)MTLog(@"[HYBRID-OPEN] key=%@ value=%@ class=%@",k,v,NSStringFromClass([v class]));
+    }
+    %orig;
+}
 %end
 %hook DBApplicationSceneViewController
 - (void)foregroundSceneWithSettings:(id)settings completion:(id)completion{
