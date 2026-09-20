@@ -870,6 +870,8 @@ static void MTHybridInstallAppBridge(void){
 }
 - (void)_handleOpenApplicationEvent:(id)event {
     MTLog(@"[HYBRID-OPEN] event=%@ class=%@",event,NSStringFromClass([event class]));
+    static BOOL directSelectionFired=NO;
+    if(!directSelectionFired && gYTAppInfo){directSelectionFired=YES;MTLog(@"[DIRECT-SELECT] native open event received; creating armed YouTube direct scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.15*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryCreateDirectYouTubeScene();});}
     id ctx=MTV(event,@"context");
     if(!ctx){@try{ctx=[event valueForKey:@"_context"];}@catch(__unused NSException*e){}}
     if(ctx){
