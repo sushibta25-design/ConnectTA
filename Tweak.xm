@@ -856,6 +856,7 @@ static void MTHybridInstallAppBridge(void){
     if(!ctx){@try{ctx=[event valueForKey:@"_context"];}@catch(__unused NSException*e){}}
     if(ctx){
         MTLog(@"[HYBRID-CONTEXT] value=%@ class=%@",ctx,NSStringFromClass([ctx class]));
+        static BOOL onceB=NO;if(!onceB&&gYTAppInfo){onceB=YES;Class c=NSClassFromString(@"DBApplicationLaunchInfo");SEL z=NSSelectorFromString(@"initWithApplication:activationSettings:");id as=MTV(ctx,@"activationSettings");if(c&&[[c alloc] respondsToSelector:z]){id y=((id(*)(id,SEL,id,id))objc_msgSend)([c alloc],z,gYTAppInfo,as);Class ec=NSClassFromString(@"DBEvent");id ev=[ec new];@try{[ev setValue:@4 forKey:@"type"];[ev setValue:y forKey:@"context"];}@catch(NSException*e){MTLog(@"[TEST-B] event error %@",e.reason);}MTLog(@"[TEST-B] event=%@ ctx=%@",ev,y);if(gMTHybridDashboard)((void(*)(id,SEL,id))objc_msgSend)(gMTHybridDashboard,NSSelectorFromString(@"_handleOpenApplicationEvent:"),ev);}}
         for(NSString*k in @[@"application",@"applicationInfo",@"bundleIdentifier",@"URL",@"url",@"identifier",@"sourceApplication",@"targetApplication"]){
             id v=MTV(ctx,k);if(v)MTLog(@"[HYBRID-CONTEXT] key=%@ value=%@ class=%@",k,v,NSStringFromClass([v class]));
         }
