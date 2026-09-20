@@ -6,6 +6,7 @@
 static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil;
 static void MTValidateYouTubeInDashboard(void);
+static void MTProbeRealYouTubeIdentity(void);
 static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
 static void MTLog(NSString *fmt,...){va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
 static id MTV(id o,NSString*k){@try{return[o valueForKey:k];}@catch(__unused NSException*e){return nil;}}
@@ -175,6 +176,7 @@ static void MTTryBuildYouTubeAppInfo(void){
         if([info respondsToSelector:NSSelectorFromString(@"setCBBridged:")])((void(*)(id,SEL,BOOL))objc_msgSend)(info,NSSelectorFromString(@"setCBBridged:"),YES);
         gYTAppInfo=info;
         MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
+        MTProbeRealYouTubeIdentity();
         MTValidateYouTubeInDashboard();
     }@catch(NSException*e){MTLog(@"[BUILD] ERROR %@ %@",e.name,e.reason);}
 }
@@ -299,6 +301,38 @@ static void MTProbeIdentityAndSpecFactories(void){
         }
     }
     if(gYTAppInfo) MTLog(@"[DIRECT] yt applicationIdentity=%@ processIdentity=%@",MTV(gYTAppInfo,@"applicationIdentity"),MTV(gYTAppInfo,@"processIdentity"));
+}
+static void MTProbeRealYouTubeIdentity(void){
+    if(!gYTAppInfo){MTLog(@"[YTIDENT] appInfo missing");return;}
+    for(NSString *key in @[@"applicationIdentity",@"processIdentity"]){
+        id ident=MTV(gYTAppInfo,key);
+        MTLog(@"[YTIDENT] %@=%@ class=%@",key,ident,NSStringFromClass([ident class]));
+        if(!ident)continue;
+        Class c=[ident class];
+        unsigned int mc=0;Method *m=class_copyMethodList(c,&mc);
+        for(unsigned int i=0;i<mc;i++){
+            NSString *sn=NSStringFromSelector(method_getName(m[i]));
+            if([sn localizedCaseInsensitiveContainsString:@"identity"]||
+               [sn localizedCaseInsensitiveContainsString:@"identifier"]||
+               [sn localizedCaseInsensitiveContainsString:@"bundle"]||
+               [sn localizedCaseInsensitiveContainsString:@"application"]||
+               [sn localizedCaseInsensitiveContainsString:@"process"]||
+               [sn localizedCaseInsensitiveContainsString:@"init"])
+                MTLog(@"[YTIDENT-METHOD] %@ -%@ types=%s",NSStringFromClass(c),sn,method_getTypeEncoding(m[i]));
+        }
+        free(m);
+        Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
+        for(unsigned int i=0;i<mc;i++){
+            NSString *sn=NSStringFromSelector(method_getName(m[i]));
+            if([sn localizedCaseInsensitiveContainsString:@"identity"]||
+               [sn localizedCaseInsensitiveContainsString:@"identifier"]||
+               [sn localizedCaseInsensitiveContainsString:@"bundle"]||
+               [sn localizedCaseInsensitiveContainsString:@"application"]||
+               [sn localizedCaseInsensitiveContainsString:@"process"])
+                MTLog(@"[YTIDENT-METHOD] %@ +%@ types=%s",NSStringFromClass(c),sn,method_getTypeEncoding(m[i]));
+        }
+        free(m);
+    }
 }
 static void MTTryKnownCarPlayActivation(void){
     MTProbeActivationServices();
