@@ -445,20 +445,28 @@ static id MTHomePolicy(id policy,id declaration){
 }
 %group MTHomeAdmission
 %hook CRCarPlayAppDeclaration
-- (BOOL)supportsAudio {if(MTIsYouTube(self))return YES;return %orig;}
+- (BOOL)supportsAudio {
+    if(MTIsYouTube(self))return YES;
+    return %orig;
+}
 %end
 %hook CRCarPlayAppPolicyEvaluator
 - (id)effectivePolicyForAppDeclaration:(id)declaration {
-    return MTHomePolicy(%orig,declaration);
+    id policy=%orig;
+    return MTHomePolicy(policy,declaration);
 }
 - (id)effectivePolicyForAppDeclaration:(id)declaration inVehicleWithCertificateSerial:(id)serial {
-    return MTHomePolicy(%orig,declaration);
+    id policy=%orig;
+    return MTHomePolicy(policy,declaration);
 }
 %end
 %end
 
 %hook DBApplicationInfo
-- (BOOL)isHidden {if(MTIsYouTube(self))return NO;return %orig;}
+- (BOOL)isHidden {
+    if(MTIsYouTube(self))return NO;
+    return %orig;
+}
 %end
 %hook DBDashboard
 - (void)_handleCarPlayUIReady {
