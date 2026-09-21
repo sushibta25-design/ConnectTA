@@ -4,7 +4,7 @@
 #import <objc/runtime.h>
 #import <notify.h>
 
-static NSString *const MTBuild=@"81-TABLET";
+static NSString *const MTBuild=@"82-CANVAS";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -188,62 +188,85 @@ static void MTAppStage(const char *stage){
     NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:[NSString stringWithUTF8String:stage]];
     notify_post(name.UTF8String);MTLog(@"[CLIENT80] %s",stage);
 }
+// Lay out the live app at tablet width before mapping its coordinates to CarPlay.
+// UIKit performs inverse coordinate conversion for gestures in the transformed canvas.
 @interface MTTabletContainer : UIViewController
 @property(nonatomic,strong) UIViewController *content;
+@property(nonatomic,strong) UIView *canvas;
+@property(nonatomic,strong) NSArray<NSLayoutConstraint *> *contentConstraints;
 @property(nonatomic,assign) CGSize reportedSize;
+@property(nonatomic,assign) CGSize originalPreferredSize;
 @property(nonatomic,assign) BOOL originalTranslates;
+@property(nonatomic,assign) BOOL originalPresentationContext;
+@property(nonatomic,assign) UIViewAutoresizing originalAutoresizing;
+@property(nonatomic,assign) CGRect originalBounds;
+@property(nonatomic,assign) CGPoint originalCenter;
+@property(nonatomic,assign) CGAffineTransform originalTransform;
 - (instancetype)initWithContent:(UIViewController *)content;
 - (void)detachContent;
 @end
 @implementation MTTabletContainer
 - (instancetype)initWithContent:(UIViewController *)content {
     self=[super initWithNibName:nil bundle:nil];
-    if(self){_content=content;_originalTranslates=content.view.translatesAutoresizingMaskIntoConstraints;}
+    if(self){
+        _content=content;_originalPreferredSize=content.preferredContentSize;_originalPresentationContext=content.definesPresentationContext;
+        UIView *v=content.view;
+        _originalTranslates=v.translatesAutoresizingMaskIntoConstraints;
+        _originalAutoresizing=v.autoresizingMask;
+        _originalBounds=v.bounds;_originalCenter=v.center;_originalTransform=v.transform;
+    }
     return self;
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor=UIColor.blackColor;
+    self.view.clipsToBounds=YES;
+    self.canvas=[[UIView alloc]initWithFrame:CGRectMake(0,0,1024,576)];
+    self.canvas.backgroundColor=UIColor.blackColor;
+    [self.view addSubview:self.canvas];
     [self addChildViewController:self.content];
     UITraitCollection *traits=[UITraitCollection traitCollectionWithTraitsFromCollections:@[
         [UITraitCollection traitCollectionWithUserInterfaceIdiom:UIUserInterfaceIdiomPad],
         [UITraitCollection traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassRegular],
-        [UITraitCollection traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassCompact],
-        [UITraitCollection traitCollectionWithPreferredContentSizeCategory:UIContentSizeCategorySmall]
+        [UITraitCollection traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular],
+        [UITraitCollection traitCollectionWithPreferredContentSizeCategory:UIContentSizeCategoryMedium]
     ]];
     [self setOverrideTraitCollection:traits forChildViewController:self.content];
-    UIView *contentView=self.content.view;
-    contentView.translatesAutoresizingMaskIntoConstraints=NO;
-    [self.view addSubview:contentView];
-    [NSLayoutConstraint activateConstraints:@[
-        [contentView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [contentView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [contentView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [contentView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
-    ]];
+    UIView *v=self.content.view;
+    v.transform=CGAffineTransformIdentity;
+    v.translatesAutoresizingMaskIntoConstraints=NO;
+    [self.canvas addSubview:v];
+    self.contentConstraints=@[
+        [v.leadingAnchor constraintEqualToAnchor:self.canvas.leadingAnchor],
+        [v.trailingAnchor constraintEqualToAnchor:self.canvas.trailingAnchor],
+        [v.topAnchor constraintEqualToAnchor:self.canvas.topAnchor],
+        [v.bottomAnchor constraintEqualToAnchor:self.canvas.bottomAnchor]
+    ];
+    [NSLayoutConstraint activateConstraints:self.contentConstraints];
     [self.content didMoveToParentViewController:self];
-    MTLog(@"[TABLET81] child=%@ traits=%@",NSStringFromClass(self.content.class),self.content.traitCollection);
+    // Keep presentations owned by the content subtree when UIKit permits it.
+    self.content.definesPresentationContext=YES;
     MTAppStage("tablet");
-}
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    if(@available(iOS 16.0,*)){
-        [self setNeedsUpdateOfSupportedInterfaceOrientations];
-        UIWindowScene *scene=self.view.window.windowScene;
-        UIWindowSceneGeometryPreferencesIOS *preferences=[[UIWindowSceneGeometryPreferencesIOS alloc]initWithInterfaceOrientations:UIInterfaceOrientationMaskLandscape];
-        [scene requestGeometryUpdateWithPreferences:preferences errorHandler:^(NSError *error){
-            MTLog(@"[TABLET81-ORIENTATION] %@",error);MTAppStage("orientation-denied");
-        }];
-    }
 }
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    CGSize size=self.view.bounds.size;
-    if(!CGSizeEqualToSize(size,self.reportedSize)){
-        self.reportedSize=size;
-        MTLog(@"[TABLET81-SIZE] container=%@ content=%@ safeArea=%@ orientation=%ld traits=%@",
-            NSStringFromCGRect(self.view.bounds),NSStringFromCGRect(self.content.view.frame),NSStringFromUIEdgeInsets(self.view.safeAreaInsets),
-            (long)self.view.window.windowScene.interfaceOrientation,self.content.traitCollection);
+    CGSize viewport=self.view.bounds.size;
+    if(viewport.width<=0 || viewport.height<=0)return;
+    CGFloat scale=viewport.width/1024.0;
+    CGSize logical=CGSizeMake(1024.0,viewport.height/scale);
+    self.canvas.bounds=(CGRect){CGPointZero,logical};
+    self.canvas.center=CGPointMake(CGRectGetMidX(self.view.bounds),CGRectGetMidY(self.view.bounds));
+    self.canvas.transform=CGAffineTransformMakeScale(scale,scale);
+    self.content.preferredContentSize=logical;
+    [self.canvas setNeedsLayout];[self.canvas layoutIfNeeded];
+    if(!CGSizeEqualToSize(viewport,self.reportedSize)){
+        self.reportedSize=viewport;
+        MTLog(@"[CANVAS82] viewport=%@ logical=%@ contentBounds=%@ scale=%.4f traits=%@",
+              NSStringFromCGSize(viewport),NSStringFromCGSize(logical),
+              NSStringFromCGRect(self.content.view.bounds),scale,self.content.traitCollection);
+        MTAppStage("canvas-1024");
+        if(self.content.traitCollection.horizontalSizeClass==UIUserInterfaceSizeClassRegular &&
+           self.content.traitCollection.verticalSizeClass==UIUserInterfaceSizeClassRegular)MTAppStage("regular-both");
     }
 }
 - (BOOL)shouldAutorotate{return YES;}
@@ -254,10 +277,16 @@ static void MTAppStage(const char *stage){
 - (void)detachContent {
     if(self.content.parentViewController==self){
         [self.content willMoveToParentViewController:nil];
+        self.content.definesPresentationContext=self.originalPresentationContext;
+        self.content.preferredContentSize=self.originalPreferredSize;
+        [NSLayoutConstraint deactivateConstraints:self.contentConstraints];
+        self.contentConstraints=nil;
         [self setOverrideTraitCollection:nil forChildViewController:self.content];
-        [self.content.view removeFromSuperview];
-        [self.content removeFromParentViewController];
-        self.content.view.translatesAutoresizingMaskIntoConstraints=self.originalTranslates;
+        UIView *v=self.content.view;
+        [v removeFromSuperview];[self.content removeFromParentViewController];
+        v.transform=self.originalTransform;v.bounds=self.originalBounds;v.center=self.originalCenter;
+        v.autoresizingMask=self.originalAutoresizing;
+        v.translatesAutoresizingMaskIntoConstraints=self.originalTranslates;
     }
 }
 @end
@@ -293,7 +322,7 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 81 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 82 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -438,7 +467,7 @@ static void MTHybridInstallAppBridge(void){
         %init;
         [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/MiniTa.txt" error:nil];
         MTLog(@"[DIRECT-BOOT] single controller, direct client, no proxy-template launch");
-        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"orientation-denied"]){
+        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"canvas-1024",@"regular-both"]){
             NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:stage];
             int token=0;
             notify_register_dispatch(name.UTF8String,&token,dispatch_get_main_queue(),^(__unused int t){MTLog(@"[CLIENT80-IPC] %@",stage);});

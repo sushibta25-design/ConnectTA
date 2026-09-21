@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.81
+Version: 0.2.82
 Architecture: iphoneos-arm64
-Description: MiniTa 81 tablet traits and adaptive landscape layout for YouTube.
+Description: MiniTa 82 live 1024-point tablet canvas for YouTube on CarPlay.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks
