@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.86
+Version: 0.2.87
 Architecture: iphoneos-arm64
-Description: MiniTa 86 dock-aware safe-area layout and scene resize updates.
+Description: MiniTa 87 host dock viewport and zero-origin client window.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks

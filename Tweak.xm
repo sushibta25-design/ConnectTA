@@ -6,7 +6,7 @@
 #import <dlfcn.h>
 #import <math.h>
 
-static NSString *const MTBuild=@"86-AUTORESIZE";
+static NSString *const MTBuild=@"87-VIEWPORT";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -362,13 +362,13 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
         for(UIScene *scene in UIApplication.sharedApplication.connectedScenes)if(MTAppCarScene(scene)){car=(UIWindowScene*)scene;break;}
         if(car && !gAppCarWindow){
             gAppCarWindow=[[UIWindow alloc]initWithWindowScene:car];
-            gAppCarWindow.frame=car.coordinateSpace.bounds;
+            gAppCarWindow.frame=(CGRect){CGPointZero,car.coordinateSpace.bounds.size};
             gAppCarWindow.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
             UIViewController *loading=[UIViewController new];
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 86 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 87 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -406,8 +406,10 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
 static void MTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot)return;gAppPumpRunning=YES;MTAppPump(0,gAppEpoch);});}
 static void MTAppResizeScene(UIWindowScene *scene){
     if(!gAppCarWindow || gAppCarWindow.windowScene!=scene)return;
-    CGRect bounds=scene.coordinateSpace.bounds;
+    CGRect bounds=(CGRect){CGPointZero,scene.coordinateSpace.bounds.size};
     if(CGRectIsEmpty(bounds))return;
+    MTLog(@"[VIEWPORT87-CLIENT] scene=%@ localWindow=%@ previousWindow=%@",
+        NSStringFromCGRect(scene.coordinateSpace.bounds),NSStringFromCGRect(bounds),NSStringFromCGRect(gAppCarWindow.frame));
     if(!CGRectEqualToRect(gAppCarWindow.frame,bounds))gAppCarWindow.frame=bounds;
     [gAppCarWindow setNeedsLayout];[gAppCarWindow layoutIfNeeded];
     [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
@@ -594,7 +596,45 @@ static id MTHomeIncludeYouTube(id original){
     return %orig;
 }
 %end
+// Host owns screen-space placement; client owns a zero-origin local window.
+static CGRect MTNativeAppViewport(id dashboard,CGRect original){
+    UIWindowScene *scene=MTV(dashboard,@"windowScene");
+    if(![scene isKindOfClass:UIWindowScene.class])return original;
+    CGRect display=scene.coordinateSpace.bounds;
+    id config=MTV(dashboard,@"environmentConfiguration");
+    id area=MTV(config,@"viewAreaFrame");
+    if([area isKindOfClass:NSValue.class] && strcmp([area objCType],@encode(CGRect))==0){
+        CGRect candidate=[area CGRectValue];
+        CGRect clipped=CGRectIntersection(display,candidate);
+        if(!CGRectIsNull(clipped) && !CGRectIsEmpty(clipped))display=clipped;
+    }
+    SEL insetsSelector=NSSelectorFromString(@"statusBarInsets");
+    if(![dashboard respondsToSelector:insetsSelector])return original;
+    UIEdgeInsets insets=((UIEdgeInsets(*)(id,SEL))objc_msgSend)(dashboard,insetsSelector);
+    if(insets.top<0 || insets.left<0 || insets.bottom<0 || insets.right<0)return original;
+    CGRect viewport=UIEdgeInsetsInsetRect(display,insets);
+    if(CGRectIsEmpty(viewport) || CGRectIsNull(viewport))return original;
+    MTLog(@"[VIEWPORT87-HOST] original=%@ display=%@ dock=%@ target=%@",
+          NSStringFromCGRect(original),NSStringFromCGRect(display),NSStringFromUIEdgeInsets(insets),NSStringFromCGRect(viewport));
+    return viewport;
+}
 %hook DBDashboard
+- (CGRect)sceneFrameForAppInfo:(id)app {
+    CGRect frame=%orig;
+    return MTIsYouTube(app)?MTNativeAppViewport(self,frame):frame;
+}
+- (CGRect)sceneFrameForAppInfo:(id)app proxyAppInfo:(id)proxy {
+    CGRect frame=%orig;
+    return MTIsYouTube(app)?MTNativeAppViewport(self,frame):frame;
+}
+- (UIEdgeInsets)safeAreaInsetsForAppInfo:(id)app {
+    if(MTIsYouTube(app))return UIEdgeInsetsZero;
+    return %orig;
+}
+- (UIEdgeInsets)safeAreaInsetsForAppInfo:(id)app proxyAppInfo:(id)proxy {
+    if(MTIsYouTube(app))return UIEdgeInsetsZero;
+    return %orig;
+}
 - (void)_handleCarPlayUIReady {
     %orig;
     MTLog(@"[HOME85-READY] homeClass=%@ iconsSelector=%d iconModel=%@ leafClass=%@",
