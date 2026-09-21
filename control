@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.83
+Version: 0.2.84
 Architecture: iphoneos-arm64
-Description: MiniTa 83 early tablet identity experiment for YouTube with 1024-point CarPlay canvas.
+Description: MiniTa 84 YouTube CarPlay Home admission and native icon launch.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks

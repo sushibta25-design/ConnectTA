@@ -1,1 +1,1 @@
-{ Filter = { Bundles = ( "com.apple.CarPlayApp", "com.google.ios.youtube" ); Mode = "Any"; }; }
+{ Filter = { Bundles = ("com.apple.CarPlayApp", "com.google.ios.youtube", "com.apple.springboard"); Executables = ("carplayd"); Mode = "Any"; }; }

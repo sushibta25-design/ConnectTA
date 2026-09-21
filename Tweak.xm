@@ -3,8 +3,9 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <notify.h>
+#import <dlfcn.h>
 
-static NSString *const MTBuild=@"83-PADIDENTITY";
+static NSString *const MTBuild=@"84-HOME";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -18,7 +19,7 @@ static void MTLog(NSString *format,...){
     NSString *line=[NSString stringWithFormat:@"[%@ pid=%d] %@\n",MTBuild,NSProcessInfo.processInfo.processIdentifier,message];
     NSLog(@"%@",line);
     BOOL app=[NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.google.ios.youtube"];
-    NSString *path=app?[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/MiniTa-client.txt"]:@"/var/mobile/MiniTa.txt";
+    NSString *path=app?[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/MiniTa-client.txt"]:([NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.CarPlayApp"]?@"/var/mobile/MiniTa.txt":@"/var/mobile/MiniTa-admission.txt");
     @synchronized(NSFileManager.class){
         NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
         NSFileHandle *file=[NSFileHandle fileHandleForWritingAtPath:path];
@@ -84,7 +85,7 @@ static void MTStartHost(NSUInteger generation){
         gPolling=YES;MTHostTick(0,generation);
     });
 }
-static void MTTryDirectLaunch(void){
+static void __attribute__((unused)) MTTryDirectLaunch(void){
     if(!NSThread.isMainThread){dispatch_async(dispatch_get_main_queue(),^{MTTryDirectLaunch();});return;}
     if(gStarted || !gEnvironment || !gActivation || !MTCarScene())return;
     gStarted=YES;
@@ -340,7 +341,7 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 83 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 84 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -426,24 +427,50 @@ static void MTHybridInstallAppBridge(void){
     MTAppStage("loaded");MTAppStart();
 }
 
+// Policy is evaluated outside the YouTube process as well as in CarPlayApp.
+static id MTHomePolicy(id policy,id declaration){
+    if(!MTIsYouTube(declaration))return policy;
+    if(!policy)policy=[NSClassFromString(@"CRCarPlayAppPolicy") new];
+    if(!policy)return nil;
+    @try{
+        [policy setValue:@YES forKey:@"carPlaySupported"];
+        [policy setValue:@YES forKey:@"canDisplayOnCarScreen"];
+        [policy setValue:@NO forKey:@"launchUsingSiri"];
+        [policy setValue:@NO forKey:@"launchUsingMusicUIService"];
+        [policy setValue:@NO forKey:@"launchUsingTemplateUI"];
+        static dispatch_once_t once;
+        dispatch_once(&once,^{MTLog(@"[HOME84-POLICY] YouTube supported; direct app launch");});
+    }@catch(NSException *e){MTLog(@"[HOME84-POLICY-ERROR] %@",e);}
+    return policy;
+}
+%group MTHomeAdmission
+%hook CRCarPlayAppDeclaration
+- (BOOL)supportsAudio {if(MTIsYouTube(self))return YES;return %orig;}
+%end
+%hook CRCarPlayAppPolicyEvaluator
+- (id)effectivePolicyForAppDeclaration:(id)declaration {
+    return MTHomePolicy(%orig,declaration);
+}
+- (id)effectivePolicyForAppDeclaration:(id)declaration inVehicleWithCertificateSerial:(id)serial {
+    return MTHomePolicy(%orig,declaration);
+}
+%end
+%end
+
+%hook DBApplicationInfo
+- (BOOL)isHidden {if(MTIsYouTube(self))return NO;return %orig;}
+%end
 %hook DBDashboard
 - (void)_handleCarPlayUIReady {
     %orig;
-    MTLog(@"[DIRECT-READY] open Google Maps once to supply native environment and activation settings");
-    dispatch_async(dispatch_get_main_queue(),^{MTTryDirectLaunch();});
+    MTLog(@"[HOME84-READY] waiting for YouTube icon launch; Maps trigger removed");
 }
 - (void)_handleOpenApplicationEvent:(id)event {
     id context=MTV(event,@"context");if(!context)context=MTV(event,@"_context");
     id app=MTV(context,@"application");
     if(!app){id value=MTV(context,@"value");if(value){context=value;app=MTV(value,@"application");}}
-    NSString *bundle=MTV(app,@"bundleIdentifier");
-    BOOL maps=[bundle isEqualToString:@"com.google.Maps"]||[bundle isEqualToString:@"com.apple.Maps"];
-    if(maps){
-        id settings=MTV(context,@"activationSettings");
-        if([settings isKindOfClass:NSDictionary.class]){gActivation=[settings copy];MTLog(@"[DIRECT-SEED] app=%@ settings=%@",bundle,gActivation);}
-    }
+    if(MTIsYouTube(app))MTLog(@"[HOME84-TAP] YouTube activation=%@",MTV(context,@"activationSettings"));
     %orig;
-    if(maps)dispatch_async(dispatch_get_main_queue(),^{MTTryDirectLaunch();});
 }
 - (id)sceneIdentifierForAppInfo:(id)info {
     id original=%orig;
@@ -456,25 +483,12 @@ static void MTHybridInstallAppBridge(void){
     return original;
 }
 %end
-
 %hook DBSceneUpdate
-- (id)initWithApplicationInfo:(id)app environment:(id)env {
-    id result=%orig;
-    NSString *bundle=MTV(app,@"bundleIdentifier");
-    if(env && ([bundle isEqualToString:@"com.google.Maps"]||[bundle isEqualToString:@"com.apple.Maps"])){
-        gEnvironment=env;dispatch_async(dispatch_get_main_queue(),^{MTTryDirectLaunch();});
-    }
-    return result;
-}
 - (id)initWithApplicationInfo:(id)app proxyApplicationInfo:(id)proxy environment:(id)env activationSettings:(id)settings {
     BOOL target=MTIsYouTube(app);
     if(target)proxy=nil;
     id result=%orig(app,proxy,env,settings);
-    NSString *bundle=MTV(app,@"bundleIdentifier");
-    if(env && ([bundle isEqualToString:@"com.google.Maps"]||[bundle isEqualToString:@"com.apple.Maps"])){
-        gEnvironment=env;dispatch_async(dispatch_get_main_queue(),^{MTTryDirectLaunch();});
-    }
-    if(target)MTLog(@"[DIRECT-UPDATE] app=%@ actualProxy=%@",MTV(result,@"applicationInfo"),MTV(result,@"proxyApplicationInfo"));
+    if(target)MTLog(@"[HOME84-NATIVE-UPDATE] app=%@ proxy=%@",MTV(result,@"applicationInfo"),MTV(result,@"proxyApplicationInfo"));
     return result;
 }
 %end
@@ -487,10 +501,16 @@ static void MTHybridInstallAppBridge(void){
             MTLog(@"[PAD83-BOOT] early device + trait idiom override enabled for YouTube process");
             MTLog(@"[DIRECT-APP-LOADED]");MTHybridInstallAppBridge();return;
         }
-        if(![bundle isEqualToString:@"com.apple.CarPlayApp"])return;
+        BOOL car=[bundle isEqualToString:@"com.apple.CarPlayApp"];
+        BOOL spring=[bundle isEqualToString:@"com.apple.springboard"];
+        BOOL daemon=[NSProcessInfo.processInfo.processName isEqualToString:@"carplayd"];
+        if(!car && !spring && !daemon)return;
+        dlopen("/System/Library/PrivateFrameworks/CarKit.framework/CarKit",RTLD_NOW);
+        %init(MTHomeAdmission);
+        if(!car){MTHybridInstallAdmission();return;}
         %init;
         [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/MiniTa.txt" error:nil];
-        MTLog(@"[DIRECT-BOOT] single controller, direct client, no proxy-template launch");
+        MTLog(@"[DIRECT-BOOT] native Home icon launch; no automatic Maps launch or overlay host");
         for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"canvas-1024",@"regular-both",@"pad-device-used",@"pad-traits-used"]){
             NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:stage];
             int token=0;
