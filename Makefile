@@ -5,5 +5,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = MiniTa
 MiniTa_FILES = Tweak.xm
 MiniTa_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
-MiniTa_FRAMEWORKS = UIKit Foundation
+MiniTa_FRAMEWORKS = UIKit Foundation CoreFoundation
 include $(THEOS_MAKE_PATH)/tweak.mk
+SUBPROJECTS += prefs
+include $(THEOS_MAKE_PATH)/aggregate.mk

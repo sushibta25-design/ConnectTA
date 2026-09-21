@@ -1,8 +1,8 @@
-name: Build MiniTa Probe
+name: Build MiniTa App Bridge
 on:
   workflow_dispatch:
   push:
-    branches: [ main, test-launchinfo-A, test-event-B, test-foreground-A, test-foreground-B, test-direct-79, test-tablet-81, test-tablet-82, test-tablet-83, test-home-84, test-home-85, test-resize-86, test-viewport-87, test-host-88 ]
+    branches: [ main, feature-appbridge-90 ]
 jobs:
   build:
     runs-on: macos-14
@@ -18,9 +18,11 @@ jobs:
           mkdir -p $HOME/theos/sdks
           curl -L -o /tmp/sdk.tar.xz https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
           tar -xf /tmp/sdk.tar.xz -C $HOME/theos/sdks
+      - name: Validate configuration
+        run: python3 tests/check_config.py
       - run: make clean package FINALPACKAGE=1
       - uses: actions/upload-artifact@v4
         with:
-          name: MINITA-88-HOSTALIGN-ROOTLESS
+          name: MINITA-90-APPBRIDGE-ROOTLESS
           path: packages/*.deb
           if-no-files-found: error

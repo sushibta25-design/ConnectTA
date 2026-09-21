@@ -1,9 +1,9 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.88
+Version: 0.3.0
 Architecture: iphoneos-arm64
-Description: MiniTa 88 native controller proxy removal and scene host alignment.
+Description: MiniTa 90 experimental per-app CarPlay bridge with Settings switches.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks
-Depends: mobilesubstrate
+Depends: mobilesubstrate, preferenceloader
