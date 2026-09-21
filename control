@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.82
+Version: 0.2.83
 Architecture: iphoneos-arm64
-Description: MiniTa 82 live 1024-point tablet canvas for YouTube on CarPlay.
+Description: MiniTa 83 early tablet identity experiment for YouTube with 1024-point CarPlay canvas.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks

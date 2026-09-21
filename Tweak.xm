@@ -4,7 +4,7 @@
 #import <objc/runtime.h>
 #import <notify.h>
 
-static NSString *const MTBuild=@"82-CANVAS";
+static NSString *const MTBuild=@"83-PADIDENTITY";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -177,6 +177,24 @@ static void MTHybridInstallAdmission(void){
     MTLog(@"[HYBRID-ADMIT] installed info=%d ent2=%d ent3=%d",mtOrigInfo!=nil,mtOrigEnt2!=nil,mtOrigEnt3!=nil);
 }
 
+// This experiment sets the idiom before YouTube creates/caches its phone UI.
+// Scoped by explicit Logos group initialization to the YouTube process only.
+static volatile int32_t gDeviceIdiomReads=0, gTraitIdiomReads=0;
+%group MTTabletIdentity
+%hook UIDevice
+- (UIUserInterfaceIdiom)userInterfaceIdiom {
+    __sync_fetch_and_add(&gDeviceIdiomReads,1);
+    return UIUserInterfaceIdiomPad;
+}
+%end
+%hook UITraitCollection
+- (UIUserInterfaceIdiom)userInterfaceIdiom {
+    __sync_fetch_and_add(&gTraitIdiomReads,1);
+    return UIUserInterfaceIdiomPad;
+}
+%end
+%end
+
 static UIWindow *gAppCarWindow=nil, *gDonorWindow=nil;
 static UIViewController *gMovedRoot=nil, *gDonorPlaceholder=nil;
 static BOOL gAppPumpRunning=NO;
@@ -322,7 +340,7 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 82 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 83 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -346,6 +364,10 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
                 gAppCarWindow.rootViewController=gTabletContainer;
                 [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
                 [gAppCarWindow makeKeyAndVisible];MTAppStage("root");
+                MTLog(@"[PAD83-IDENTITY] deviceReads=%d traitReads=%d effectiveIdiom=%ld root=%@",
+                      gDeviceIdiomReads,gTraitIdiomReads,(long)gMovedRoot.traitCollection.userInterfaceIdiom,NSStringFromClass(gMovedRoot.class));
+                if(gDeviceIdiomReads>0)MTAppStage("pad-device-used");
+                if(gTraitIdiomReads>0)MTAppStage("pad-traits-used");
                 MTLog(@"[CLIENT80-ROOT] class=%@ frame=%@ scene=%@",NSStringFromClass(gMovedRoot.class),NSStringFromCGRect(gMovedRoot.view.frame),car.session.persistentIdentifier);
             }
         }
@@ -461,13 +483,15 @@ static void MTHybridInstallAppBridge(void){
     @autoreleasepool {
         NSString *bundle=NSBundle.mainBundle.bundleIdentifier;
         if([bundle isEqualToString:@"com.google.ios.youtube"]){
+            %init(MTTabletIdentity);
+            MTLog(@"[PAD83-BOOT] early device + trait idiom override enabled for YouTube process");
             MTLog(@"[DIRECT-APP-LOADED]");MTHybridInstallAppBridge();return;
         }
         if(![bundle isEqualToString:@"com.apple.CarPlayApp"])return;
         %init;
         [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/MiniTa.txt" error:nil];
         MTLog(@"[DIRECT-BOOT] single controller, direct client, no proxy-template launch");
-        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"canvas-1024",@"regular-both"]){
+        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"canvas-1024",@"regular-both",@"pad-device-used",@"pad-traits-used"]){
             NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:stage];
             int token=0;
             notify_register_dispatch(name.UTF8String,&token,dispatch_get_main_queue(),^(__unused int t){MTLog(@"[CLIENT80-IPC] %@",stage);});
