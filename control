@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.0
+Version: 0.2.79
 Architecture: iphoneos-arm64
-Description: MiniTa Phase 2 YouTube scene capture and CarPlay host experiment.
+Description: MiniTa 79 direct YouTube client with a single CarPlay presenter.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks
