@@ -4,8 +4,9 @@
 #import <objc/runtime.h>
 #import <notify.h>
 #import <dlfcn.h>
+#import <math.h>
 
-static NSString *const MTBuild=@"85-HOMEICON";
+static NSString *const MTBuild=@"86-AUTORESIZE";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -213,7 +214,7 @@ static void MTAppStage(const char *stage){
 @property(nonatomic,strong) UIViewController *content;
 @property(nonatomic,strong) UIView *canvas;
 @property(nonatomic,strong) NSArray<NSLayoutConstraint *> *contentConstraints;
-@property(nonatomic,assign) CGSize reportedSize;
+@property(nonatomic,assign) CGRect reportedViewport;
 @property(nonatomic,assign) CGSize originalPreferredSize;
 @property(nonatomic,assign) BOOL originalTranslates;
 @property(nonatomic,assign) BOOL originalPresentationContext;
@@ -267,25 +268,50 @@ static void MTAppStage(const char *stage){
     self.content.definesPresentationContext=YES;
     MTAppStage("tablet");
 }
+- (void)viewSafeAreaInsetsDidChange {
+    [super viewSafeAreaInsetsDidChange];
+    [self.view setNeedsLayout];
+}
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    [coordinator animateAlongsideTransition:^(__unused id<UIViewControllerTransitionCoordinatorContext> context){
+        [self.view setNeedsLayout];[self.view layoutIfNeeded];
+    } completion:^(__unused id<UIViewControllerTransitionCoordinatorContext> context){
+        [self.view setNeedsLayout];[self.view layoutIfNeeded];
+    }];
+}
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    CGSize viewport=self.view.bounds.size;
-    if(viewport.width<=0 || viewport.height<=0)return;
-    CGFloat scale=viewport.width/1024.0;
-    CGSize logical=CGSizeMake(1024.0,viewport.height/scale);
+    // UIKit supplies the app-safe rectangle: reserve the dock on whichever side
+    // the head unit places it. Do not hard-code screen width or dock thickness.
+    CGRect viewport=CGRectIntersection(self.view.bounds,self.view.safeAreaLayoutGuide.layoutFrame);
+    if(CGRectIsNull(viewport) || CGRectIsEmpty(viewport))return;
+    if(CGRectEqualToRect(viewport,self.reportedViewport))return;
+    self.reportedViewport=viewport;
+    CGFloat scale=viewport.size.width/1024.0;
+    CGSize logical=CGSizeMake(1024.0,viewport.size.height/scale);
     self.canvas.bounds=(CGRect){CGPointZero,logical};
-    self.canvas.center=CGPointMake(CGRectGetMidX(self.view.bounds),CGRectGetMidY(self.view.bounds));
+    self.canvas.center=CGPointMake(CGRectGetMidX(viewport),CGRectGetMidY(viewport));
     self.canvas.transform=CGAffineTransformMakeScale(scale,scale);
-    self.content.preferredContentSize=logical;
+    // The child is entirely inside the safe area; UIKit computes its local
+    // safe area after the transform. Auto Layout reflows against logical bounds.
+    if(!CGSizeEqualToSize(self.content.preferredContentSize,logical))self.content.preferredContentSize=logical;
     [self.canvas setNeedsLayout];[self.canvas layoutIfNeeded];
-    if(!CGSizeEqualToSize(viewport,self.reportedSize)){
-        self.reportedSize=viewport;
-        MTLog(@"[CANVAS82] viewport=%@ logical=%@ contentBounds=%@ scale=%.4f traits=%@",
-              NSStringFromCGSize(viewport),NSStringFromCGSize(logical),
-              NSStringFromCGRect(self.content.view.bounds),scale,self.content.traitCollection);
-        MTAppStage("canvas-1024");
-        if(self.content.traitCollection.horizontalSizeClass==UIUserInterfaceSizeClassRegular &&
-           self.content.traitCollection.verticalSizeClass==UIUserInterfaceSizeClassRegular)MTAppStage("regular-both");
+    [self.content.view setNeedsLayout];[self.content.view layoutIfNeeded];
+    MTLog(@"[RESIZE86] window=%@ root=%@ safeInsets=%@ viewport=%@ logical=%@ child=%@ scale=%.4f",
+          NSStringFromCGRect(self.view.window.bounds),NSStringFromCGRect(self.view.bounds),
+          NSStringFromUIEdgeInsets(self.view.safeAreaInsets),NSStringFromCGRect(viewport),
+          NSStringFromCGSize(logical),NSStringFromCGRect(self.content.view.bounds),scale);
+    MTAppStage("resized-safearea");
+    // Send numeric geometry to the main CarPlay log, without sharing app files.
+    // Four unsigned 16-bit fields in points: x, y, width, height.
+    uint64_t geometry=((uint64_t)MIN(65535,MAX(0,lround(viewport.origin.x)))<<48) |
+        ((uint64_t)MIN(65535,MAX(0,lround(viewport.origin.y)))<<32) |
+        ((uint64_t)MIN(65535,MAX(0,lround(viewport.size.width)))<<16) |
+        (uint64_t)MIN(65535,MAX(0,lround(viewport.size.height)));
+    int token=0;
+    if(notify_register_check("com.sushibta.minita.geometry86",&token)==NOTIFY_STATUS_OK){
+        notify_set_state(token,geometry);notify_post("com.sushibta.minita.geometry86");notify_cancel(token);
     }
 }
 - (BOOL)shouldAutorotate{return YES;}
@@ -337,11 +363,12 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
         if(car && !gAppCarWindow){
             gAppCarWindow=[[UIWindow alloc]initWithWindowScene:car];
             gAppCarWindow.frame=car.coordinateSpace.bounds;
+            gAppCarWindow.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
             UIViewController *loading=[UIViewController new];
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 85 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 86 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -377,13 +404,28 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
     else{gAppPumpRunning=NO;if(!gMovedRoot)MTAppStage(gAppCarWindow?"no-root":"no-scene");}
 }
 static void MTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot)return;gAppPumpRunning=YES;MTAppPump(0,gAppEpoch);});}
+static void MTAppResizeScene(UIWindowScene *scene){
+    if(!gAppCarWindow || gAppCarWindow.windowScene!=scene)return;
+    CGRect bounds=scene.coordinateSpace.bounds;
+    if(CGRectIsEmpty(bounds))return;
+    if(!CGRectEqualToRect(gAppCarWindow.frame,bounds))gAppCarWindow.frame=bounds;
+    [gAppCarWindow setNeedsLayout];[gAppCarWindow layoutIfNeeded];
+    [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
+}
 @interface MTYouTubeCarSceneDelegate : UIResponder <UIWindowSceneDelegate>
 @end
 @implementation MTYouTubeCarSceneDelegate
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options {
     (void)scene;(void)session;(void)options;MTAppStage("connect");MTAppStart();
 }
-- (void)sceneDidBecomeActive:(UIScene *)scene {(void)scene;MTAppStart();}
+- (void)sceneDidBecomeActive:(UIScene *)scene {
+    MTAppStart();
+    if([scene isKindOfClass:UIWindowScene.class])MTAppResizeScene((UIWindowScene*)scene);
+}
+- (void)windowScene:(UIWindowScene *)scene didUpdateCoordinateSpace:(id<UICoordinateSpace>)previousCoordinateSpace interfaceOrientation:(UIInterfaceOrientation)previousInterfaceOrientation traitCollection:(UITraitCollection *)previousTraitCollection {
+    (void)previousCoordinateSpace;(void)previousInterfaceOrientation;(void)previousTraitCollection;
+    MTAppResizeScene(scene);
+}
 - (void)sceneDidDisconnect:(UIScene *)scene {if(scene==gAppCarWindow.windowScene)MTAppRestore();}
 @end
 static id MTHybridSceneConfigInit(id self,SEL cmd,NSString *name,NSString *role){
@@ -543,6 +585,10 @@ static id MTHomeIncludeYouTube(id original){
 %end
 
 %hook DBApplicationInfo
+- (BOOL)presentsUnderStatusBar {
+    if(MTIsYouTube(self))return NO;
+    return %orig;
+}
 - (BOOL)isHidden {
     if(MTIsYouTube(self))return NO;
     return %orig;
@@ -602,11 +648,20 @@ static id MTHomeIncludeYouTube(id original){
         %init;
         [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/MiniTa.txt" error:nil];
         MTLog(@"[DIRECT-BOOT] native Home icon launch; no automatic Maps launch or overlay host");
-        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"canvas-1024",@"regular-both",@"pad-device-used",@"pad-traits-used"]){
+        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"canvas-1024",@"regular-both",@"pad-device-used",@"pad-traits-used",@"resized-safearea"]){
             NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:stage];
             int token=0;
             notify_register_dispatch(name.UTF8String,&token,dispatch_get_main_queue(),^(__unused int t){MTLog(@"[CLIENT80-IPC] %@",stage);});
         }
+        int geometryToken=0;
+        notify_register_dispatch("com.sushibta.minita.geometry86",&geometryToken,dispatch_get_main_queue(),^(int token){
+            uint64_t value=0;
+            if(notify_get_state(token,&value)==NOTIFY_STATUS_OK){
+                MTLog(@"[RESIZE86-IPC] safeViewport x=%u y=%u width=%u height=%u",
+                    (unsigned)((value>>48)&65535),(unsigned)((value>>32)&65535),
+                    (unsigned)((value>>16)&65535),(unsigned)(value&65535));
+            }
+        });
         MTHybridInstallAdmission();
         [[NSNotificationCenter defaultCenter]addObserverForName:UISceneDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){
             if(note.object==gWindow.windowScene || [((UIScene*)note.object).session.persistentIdentifier containsString:@"DBDashboard-Car"]){MTLog(@"[DIRECT-DISCONNECT]");MTReset();}
