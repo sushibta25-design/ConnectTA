@@ -2,7 +2,7 @@ name: Build MiniTa Probe
 on:
   workflow_dispatch:
   push:
-    branches: [ main, test-launchinfo-A, test-event-B, test-foreground-A, test-foreground-B, test-direct-79, test-tablet-81, test-tablet-82, test-tablet-83, test-home-84 ]
+    branches: [ main, test-launchinfo-A, test-event-B, test-foreground-A, test-foreground-B, test-direct-79, test-tablet-81, test-tablet-82, test-tablet-83, test-home-84, test-home-85 ]
 jobs:
   build:
     runs-on: macos-14
@@ -21,6 +21,6 @@ jobs:
       - run: make clean package FINALPACKAGE=1
       - uses: actions/upload-artifact@v4
         with:
-          name: MINITA-84-HOME-ROOTLESS
+          name: MINITA-85-HOMEICON-ROOTLESS
           path: packages/*.deb
           if-no-files-found: error

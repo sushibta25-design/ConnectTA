@@ -5,7 +5,7 @@
 #import <notify.h>
 #import <dlfcn.h>
 
-static NSString *const MTBuild=@"84-HOME";
+static NSString *const MTBuild=@"85-HOMEICON";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -341,7 +341,7 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 84 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 85 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -462,6 +462,86 @@ static id MTHomePolicy(id policy,id declaration){
 %end
 %end
 
+// Feed Home the installed application's native DBLeafIcon, not an overlay button.
+static id gHomeYouTubeIcon=nil;
+static BOOL MTHomeIsYTIcon(id icon){
+    return MTIsYouTube(MTV(icon,@"applicationInfo")) ||
+        [MTV(icon,@"applicationBundleID") isEqualToString:@"com.google.ios.youtube"] ||
+        [MTV(icon,@"leafIdentifier") isEqualToString:@"com.google.ios.youtube"];
+}
+static id MTHomeYouTubeIcon(void){
+    if(gHomeYouTubeIcon)return gHomeYouTubeIcon;
+    @try{
+        Class proxyClass=NSClassFromString(@"LSApplicationProxy");
+        Class infoClass=NSClassFromString(@"DBApplicationInfo");
+        Class iconClass=NSClassFromString(@"DBLeafIcon");
+        SEL lookup=NSSelectorFromString(@"applicationProxyForIdentifier:");
+        SEL infoInit=NSSelectorFromString(@"initWithApplicationProxy:");
+        SEL iconInit=NSSelectorFromString(@"initWithApplicationInfo:");
+        if(![proxyClass respondsToSelector:lookup] || ![infoClass instancesRespondToSelector:infoInit] ||
+           ![iconClass instancesRespondToSelector:iconInit]){
+            MTLog(@"[HOME85-UNAVAILABLE] proxy=%@ info=%@ icon=%@",proxyClass,infoClass,iconClass);return nil;
+        }
+        id proxy=((id(*)(id,SEL,id))objc_msgSend)(proxyClass,lookup,@"com.google.ios.youtube");
+        if(!MTIsYouTube(proxy))return nil;
+        id info=((id(*)(id,SEL,id))objc_msgSend)([infoClass alloc],infoInit,proxy);
+        if(!info)return nil;
+        gHomeYouTubeIcon=((id(*)(id,SEL,id))objc_msgSend)([iconClass alloc],iconInit,info);
+        MTLog(@"[HOME85-CREATED] icon=%@ identifier=%@ info=%@",gHomeYouTubeIcon,MTV(gHomeYouTubeIcon,@"leafIdentifier"),info);
+    }@catch(NSException *e){MTLog(@"[HOME85-CREATE-ERROR] %@",e);}
+    return gHomeYouTubeIcon;
+}
+static id MTHomeIncludeYouTube(id original){
+    if(original && ![original isKindOfClass:NSArray.class]){
+        MTLog(@"[HOME85-LIST-TYPE] %@",NSStringFromClass([original class]));return original;
+    }
+    for(id icon in original)if(MTHomeIsYTIcon(icon))return original;
+    id icon=MTHomeYouTubeIcon();if(!icon)return original;
+    NSMutableArray *icons=original?[original mutableCopy]:[NSMutableArray array];
+    [icons addObject:icon];
+    static dispatch_once_t once;
+    dispatch_once(&once,^{MTLog(@"[HOME85-LIST] native YouTube icon appended, count=%lu",(unsigned long)icons.count);});
+    return [icons copy];
+}
+%hook DBDashboardHomeViewController
+- (id)allApplicationIcons {
+    id icons=%orig;
+    return MTHomeIncludeYouTube(icons);
+}
+- (BOOL)isIconVisible:(id)icon {
+    if(MTHomeIsYTIcon(icon))return YES;
+    return %orig;
+}
+- (BOOL)isIconVisibleForIdentifier:(id)identifier {
+    if([identifier isEqualToString:@"com.google.ios.youtube"])return YES;
+    return %orig;
+}
+- (void)iconManager:(id)manager launchIconForIconView:(id)view {
+    id icon=MTV(view,@"icon");
+    if(MTHomeIsYTIcon(icon))MTLog(@"[HOME85-ICON-TAP] native launch %@",MTV(icon,@"applicationInfo"));
+    %orig;
+}
+%end
+%hook DBIconLayoutVehicleDataProvider
+- (id)allApplicationIcons {
+    id icons=%orig;
+    return MTHomeIncludeYouTube(icons);
+}
+%end
+%hook DBIconModel
+- (BOOL)isIconVisible:(id)icon {
+    if(MTHomeIsYTIcon(icon))return YES;
+    return %orig;
+}
+- (id)hiddenBundleIdentifiers {
+    id original=%orig;
+    if(![original isKindOfClass:NSArray.class])return original;
+    NSMutableArray *hidden=[original mutableCopy];
+    [hidden removeObject:@"com.google.ios.youtube"];
+    return [hidden copy];
+}
+%end
+
 %hook DBApplicationInfo
 - (BOOL)isHidden {
     if(MTIsYouTube(self))return NO;
@@ -471,7 +551,10 @@ static id MTHomePolicy(id policy,id declaration){
 %hook DBDashboard
 - (void)_handleCarPlayUIReady {
     %orig;
-    MTLog(@"[HOME84-READY] waiting for YouTube icon launch; Maps trigger removed");
+    MTLog(@"[HOME85-READY] homeClass=%@ iconsSelector=%d iconModel=%@ leafClass=%@",
+        NSClassFromString(@"DBDashboardHomeViewController"),
+        [NSClassFromString(@"DBDashboardHomeViewController") instancesRespondToSelector:NSSelectorFromString(@"allApplicationIcons")],
+        NSClassFromString(@"DBIconModel"),NSClassFromString(@"DBLeafIcon"));
 }
 - (void)_handleOpenApplicationEvent:(id)event {
     id context=MTV(event,@"context");if(!context)context=MTV(event,@"_context");
