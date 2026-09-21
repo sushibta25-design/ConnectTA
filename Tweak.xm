@@ -4,7 +4,7 @@
 #import <objc/runtime.h>
 #import <notify.h>
 
-static NSString *const MTBuild=@"80-APPROOT";
+static NSString *const MTBuild=@"81-TABLET";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -188,6 +188,81 @@ static void MTAppStage(const char *stage){
     NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:[NSString stringWithUTF8String:stage]];
     notify_post(name.UTF8String);MTLog(@"[CLIENT80] %s",stage);
 }
+@interface MTTabletContainer : UIViewController
+@property(nonatomic,strong) UIViewController *content;
+@property(nonatomic,assign) CGSize reportedSize;
+@property(nonatomic,assign) BOOL originalTranslates;
+- (instancetype)initWithContent:(UIViewController *)content;
+- (void)detachContent;
+@end
+@implementation MTTabletContainer
+- (instancetype)initWithContent:(UIViewController *)content {
+    self=[super initWithNibName:nil bundle:nil];
+    if(self){_content=content;_originalTranslates=content.view.translatesAutoresizingMaskIntoConstraints;}
+    return self;
+}
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor=UIColor.blackColor;
+    [self addChildViewController:self.content];
+    UITraitCollection *traits=[UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        [UITraitCollection traitCollectionWithUserInterfaceIdiom:UIUserInterfaceIdiomPad],
+        [UITraitCollection traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassRegular],
+        [UITraitCollection traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassCompact],
+        [UITraitCollection traitCollectionWithPreferredContentSizeCategory:UIContentSizeCategorySmall]
+    ]];
+    [self setOverrideTraitCollection:traits forChildViewController:self.content];
+    UIView *contentView=self.content.view;
+    contentView.translatesAutoresizingMaskIntoConstraints=NO;
+    [self.view addSubview:contentView];
+    [NSLayoutConstraint activateConstraints:@[
+        [contentView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [contentView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [contentView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [contentView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    [self.content didMoveToParentViewController:self];
+    MTLog(@"[TABLET81] child=%@ traits=%@",NSStringFromClass(self.content.class),self.content.traitCollection);
+    MTAppStage("tablet");
+}
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if(@available(iOS 16.0,*)){
+        [self setNeedsUpdateOfSupportedInterfaceOrientations];
+        UIWindowScene *scene=self.view.window.windowScene;
+        UIWindowSceneGeometryPreferencesIOS *preferences=[[UIWindowSceneGeometryPreferencesIOS alloc]initWithInterfaceOrientations:UIInterfaceOrientationMaskLandscape];
+        [scene requestGeometryUpdateWithPreferences:preferences errorHandler:^(NSError *error){
+            MTLog(@"[TABLET81-ORIENTATION] %@",error);MTAppStage("orientation-denied");
+        }];
+    }
+}
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CGSize size=self.view.bounds.size;
+    if(!CGSizeEqualToSize(size,self.reportedSize)){
+        self.reportedSize=size;
+        MTLog(@"[TABLET81-SIZE] container=%@ content=%@ safeArea=%@ orientation=%ld traits=%@",
+            NSStringFromCGRect(self.view.bounds),NSStringFromCGRect(self.content.view.frame),NSStringFromUIEdgeInsets(self.view.safeAreaInsets),
+            (long)self.view.window.windowScene.interfaceOrientation,self.content.traitCollection);
+    }
+}
+- (BOOL)shouldAutorotate{return YES;}
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations{return UIInterfaceOrientationMaskLandscape;}
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation{return UIInterfaceOrientationLandscapeRight;}
+- (BOOL)prefersStatusBarHidden{return YES;}
+- (BOOL)prefersHomeIndicatorAutoHidden{return YES;}
+- (void)detachContent {
+    if(self.content.parentViewController==self){
+        [self.content willMoveToParentViewController:nil];
+        [self setOverrideTraitCollection:nil forChildViewController:self.content];
+        [self.content.view removeFromSuperview];
+        [self.content removeFromParentViewController];
+        self.content.view.translatesAutoresizingMaskIntoConstraints=self.originalTranslates;
+    }
+}
+@end
+static MTTabletContainer *gTabletContainer=nil;
+
 static BOOL MTHybridCarRole(NSString *role){return [role hasPrefix:@"CPTemplateApplicationSceneSessionRole"]||[role hasPrefix:@"UIWindowSceneSessionRoleCarPlay"];}
 static BOOL MTAppCarSession(UISceneSession *session){
     NSString *role=mtOrigSessionRole?((id(*)(id,SEL))mtOrigSessionRole)(session,@selector(role)):session.role;
@@ -199,7 +274,9 @@ static BOOL MTAppCarScene(UIScene *scene){
 static void MTAppRestore(void){
     gAppEpoch++;gAppPumpRunning=NO;
     if(gMovedRoot){
+        [gTabletContainer detachContent];
         gAppCarWindow.rootViewController=nil;
+        gTabletContainer=nil;
         if(gDonorWindow && gDonorWindow.rootViewController==gDonorPlaceholder)gDonorWindow.rootViewController=gMovedRoot;
     }
     gAppCarWindow.hidden=YES;gAppCarWindow=nil;gDonorWindow=nil;gMovedRoot=nil;gDonorPlaceholder=nil;
@@ -216,7 +293,7 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 80 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 81 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -236,9 +313,9 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
                 gDonorWindow=donor;gMovedRoot=donor.rootViewController;
                 gDonorPlaceholder=[UIViewController new];gDonorPlaceholder.view.backgroundColor=UIColor.blackColor;
                 donor.rootViewController=gDonorPlaceholder;
-                gAppCarWindow.rootViewController=gMovedRoot;
-                gMovedRoot.view.frame=gAppCarWindow.bounds;
-                [gMovedRoot.view setNeedsLayout];[gMovedRoot.view layoutIfNeeded];
+                gTabletContainer=[[MTTabletContainer alloc]initWithContent:gMovedRoot];
+                gAppCarWindow.rootViewController=gTabletContainer;
+                [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
                 [gAppCarWindow makeKeyAndVisible];MTAppStage("root");
                 MTLog(@"[CLIENT80-ROOT] class=%@ frame=%@ scene=%@",NSStringFromClass(gMovedRoot.class),NSStringFromCGRect(gMovedRoot.view.frame),car.session.persistentIdentifier);
             }
@@ -361,7 +438,7 @@ static void MTHybridInstallAppBridge(void){
         %init;
         [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/MiniTa.txt" error:nil];
         MTLog(@"[DIRECT-BOOT] single controller, direct client, no proxy-template launch");
-        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error"]){
+        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"orientation-denied"]){
             NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:stage];
             int token=0;
             notify_register_dispatch(name.UTF8String,&token,dispatch_get_main_queue(),^(__unused int t){MTLog(@"[CLIENT80-IPC] %@",stage);});

@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.80
+Version: 0.2.81
 Architecture: iphoneos-arm64
-Description: MiniTa 80 direct client with YouTube window and root-controller transfer.
+Description: MiniTa 81 tablet traits and adaptive landscape layout for YouTube.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks
