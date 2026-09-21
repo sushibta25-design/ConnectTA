@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.79
+Version: 0.2.80
 Architecture: iphoneos-arm64
-Description: MiniTa 79 direct YouTube client with a single CarPlay presenter.
+Description: MiniTa 80 direct client with YouTube window and root-controller transfer.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks

@@ -2,8 +2,9 @@
 #import <Foundation/Foundation.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <notify.h>
 
-static NSString *const MTBuild=@"79-DIRECT";
+static NSString *const MTBuild=@"80-APPROOT";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -176,37 +177,127 @@ static void MTHybridInstallAdmission(void){
     MTLog(@"[HYBRID-ADMIT] installed info=%d ent2=%d ent3=%d",mtOrigInfo!=nil,mtOrigEnt2!=nil,mtOrigEnt3!=nil);
 }
 
+static UIWindow *gAppCarWindow=nil, *gDonorWindow=nil;
+static UIViewController *gMovedRoot=nil, *gDonorPlaceholder=nil;
+static BOOL gAppPumpRunning=NO;
+static NSUInteger gAppEpoch=0;
 static IMP mtOrigSceneConfigInit=nil,mtOrigSessionRole=nil,mtOrigSupportsMulti=nil;
-static BOOL MTHybridCarRole(NSString *r){return [r hasPrefix:@"CPTemplateApplicationSceneSessionRole"]||[r hasPrefix:@"UIWindowSceneSessionRoleCarPlay"];}
-static id MTHybridSceneConfigInit(id self,SEL _cmd,NSString *name,NSString *role){
-    if(MTHybridCarRole(role)){
-        MTLog(@"[HYBRID-APP] rewrite config role %@ -> %@",role,UIWindowSceneSessionRoleApplication);
-        id o=((id(*)(id,SEL,id,id))mtOrigSceneConfigInit)(self,_cmd,nil,UIWindowSceneSessionRoleApplication);
-        if([o respondsToSelector:@selector(setSceneClass:)]) ((void(*)(id,SEL,id))objc_msgSend)(o,@selector(setSceneClass:),UIWindowScene.class);
-        return o;
+static IMP mtOrigSetDelegate=nil,mtOrigDelegateConfig=nil;
+static Class gPatchedDelegateClass=Nil;
+static void MTAppStage(const char *stage){
+    NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:[NSString stringWithUTF8String:stage]];
+    notify_post(name.UTF8String);MTLog(@"[CLIENT80] %s",stage);
+}
+static BOOL MTHybridCarRole(NSString *role){return [role hasPrefix:@"CPTemplateApplicationSceneSessionRole"]||[role hasPrefix:@"UIWindowSceneSessionRoleCarPlay"];}
+static BOOL MTAppCarSession(UISceneSession *session){
+    NSString *role=mtOrigSessionRole?((id(*)(id,SEL))mtOrigSessionRole)(session,@selector(role)):session.role;
+    return MTHybridCarRole(role)||[session.persistentIdentifier hasPrefix:@"Car["];
+}
+static BOOL MTAppCarScene(UIScene *scene){
+    return [scene isKindOfClass:UIWindowScene.class] && (MTAppCarSession(scene.session)||((UIWindowScene*)scene).screen!=UIScreen.mainScreen);
+}
+static void MTAppRestore(void){
+    gAppEpoch++;gAppPumpRunning=NO;
+    if(gMovedRoot){
+        gAppCarWindow.rootViewController=nil;
+        if(gDonorWindow && gDonorWindow.rootViewController==gDonorPlaceholder)gDonorWindow.rootViewController=gMovedRoot;
     }
-    return ((id(*)(id,SEL,id,id))mtOrigSceneConfigInit)(self,_cmd,name,role);
+    gAppCarWindow.hidden=YES;gAppCarWindow=nil;gDonorWindow=nil;gMovedRoot=nil;gDonorPlaceholder=nil;
 }
-static id MTHybridSessionRole(id self,SEL _cmd){
-    NSString *r=((id(*)(id,SEL))mtOrigSessionRole)(self,_cmd);
-    if(MTHybridCarRole(r)){MTLog(@"[HYBRID-APP] rewrite session role %@",r);return UIWindowSceneSessionRoleApplication;}
-    return r;
+static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
+    if(epoch!=gAppEpoch)return;
+    @try{
+        UIWindowScene *car=nil;
+        for(UIScene *scene in UIApplication.sharedApplication.connectedScenes)if(MTAppCarScene(scene)){car=(UIWindowScene*)scene;break;}
+        if(car && !gAppCarWindow){
+            gAppCarWindow=[[UIWindow alloc]initWithWindowScene:car];
+            gAppCarWindow.frame=car.coordinateSpace.bounds;
+            UIViewController *loading=[UIViewController new];
+            loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
+            UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
+            label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+            label.text=@"MiniTa 80 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
+            [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
+        }
+        if(gAppCarWindow && !gMovedRoot){
+            NSMutableArray *windows=[UIApplication.sharedApplication.windows mutableCopy];
+            for(UIScene *scene in UIApplication.sharedApplication.connectedScenes){
+                if([scene isKindOfClass:UIWindowScene.class] && !MTAppCarScene(scene))[windows addObjectsFromArray:((UIWindowScene*)scene).windows];
+            }
+            id delegateWindow=MTV(UIApplication.sharedApplication.delegate,@"window");
+            if([delegateWindow isKindOfClass:UIWindow.class] && ![windows containsObject:delegateWindow])[windows addObject:delegateWindow];
+            UIWindow *donor=nil;
+            for(UIWindow *window in windows){
+                if(window==gAppCarWindow || window.screen!=UIScreen.mainScreen || !window.rootViewController || window.windowLevel!=UIWindowLevelNormal)continue;
+                if(!donor || (donor.hidden && !window.hidden))donor=window;
+            }
+            if(donor){
+                gDonorWindow=donor;gMovedRoot=donor.rootViewController;
+                gDonorPlaceholder=[UIViewController new];gDonorPlaceholder.view.backgroundColor=UIColor.blackColor;
+                donor.rootViewController=gDonorPlaceholder;
+                gAppCarWindow.rootViewController=gMovedRoot;
+                gMovedRoot.view.frame=gAppCarWindow.bounds;
+                [gMovedRoot.view setNeedsLayout];[gMovedRoot.view layoutIfNeeded];
+                [gAppCarWindow makeKeyAndVisible];MTAppStage("root");
+                MTLog(@"[CLIENT80-ROOT] class=%@ frame=%@ scene=%@",NSStringFromClass(gMovedRoot.class),NSStringFromCGRect(gMovedRoot.view.frame),car.session.persistentIdentifier);
+            }
+        }
+    }@catch(NSException *e){MTAppStage("error");MTLog(@"[CLIENT80-ERROR] %@ %@",e.name,e.reason);}
+    if(!gMovedRoot && attempt<40){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTAppPump(attempt+1,epoch);});}
+    else{gAppPumpRunning=NO;if(!gMovedRoot)MTAppStage(gAppCarWindow?"no-root":"no-scene");}
 }
-static BOOL MTHybridSupportsMulti(id self,SEL _cmd){(void)self;(void)_cmd;return YES;}
+static void MTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot)return;gAppPumpRunning=YES;MTAppPump(0,gAppEpoch);});}
+@interface MTYouTubeCarSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@end
+@implementation MTYouTubeCarSceneDelegate
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options {
+    (void)scene;(void)session;(void)options;MTAppStage("connect");MTAppStart();
+}
+- (void)sceneDidBecomeActive:(UIScene *)scene {(void)scene;MTAppStart();}
+- (void)sceneDidDisconnect:(UIScene *)scene {if(scene==gAppCarWindow.windowScene)MTAppRestore();}
+@end
+static id MTHybridSceneConfigInit(id self,SEL cmd,NSString *name,NSString *role){
+    BOOL car=MTHybridCarRole(role);
+    id result=((id(*)(id,SEL,id,id))mtOrigSceneConfigInit)(self,cmd,car?nil:name,car?UIWindowSceneSessionRoleApplication:role);
+    if(car){((UISceneConfiguration*)result).sceneClass=UIWindowScene.class;((UISceneConfiguration*)result).delegateClass=MTYouTubeCarSceneDelegate.class;MTAppStage("config");}
+    return result;
+}
+static id MTHybridSessionRole(id self,SEL cmd){NSString *role=((id(*)(id,SEL))mtOrigSessionRole)(self,cmd);return MTHybridCarRole(role)?UIWindowSceneSessionRoleApplication:role;}
+static BOOL MTHybridSupportsMulti(id self,SEL cmd){(void)self;(void)cmd;return YES;}
+static UISceneConfiguration *MTDelegateConfig(id self,SEL cmd,UIApplication *app,UISceneSession *session,UISceneConnectionOptions *options){
+    if(MTAppCarSession(session)){
+        UISceneConfiguration *config=[[UISceneConfiguration alloc]initWithName:nil sessionRole:UIWindowSceneSessionRoleApplication];
+        config.sceneClass=UIWindowScene.class;config.delegateClass=MTYouTubeCarSceneDelegate.class;MTAppStage("config");return config;
+    }
+    if(mtOrigDelegateConfig)return ((id(*)(id,SEL,id,id,id))mtOrigDelegateConfig)(self,cmd,app,session,options);
+    return session.configuration;
+}
+static void MTInstallDelegate(id delegate){
+    if(!delegate||gPatchedDelegateClass)return;
+    Class cls=object_getClass(delegate);SEL sel=@selector(application:configurationForConnectingSceneSession:options:);
+    Method method=class_getInstanceMethod(cls,sel);mtOrigDelegateConfig=method?method_getImplementation(method):NULL;
+    const char *types=method?method_getTypeEncoding(method):"@@:@@@";
+    class_replaceMethod(cls,sel,(IMP)MTDelegateConfig,types);gPatchedDelegateClass=cls;
+}
+static void MTSetDelegate(id self,SEL cmd,id delegate){MTInstallDelegate(delegate);((void(*)(id,SEL,id))mtOrigSetDelegate)(self,cmd,delegate);}
 static void MTHybridInstallAppBridge(void){
     Method m=class_getInstanceMethod(UISceneConfiguration.class,@selector(initWithName:sessionRole:));
     if(m){mtOrigSceneConfigInit=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSceneConfigInit);}
     m=class_getInstanceMethod(UISceneSession.class,@selector(role));
     if(m){mtOrigSessionRole=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSessionRole);}
-    Class manifest=NSClassFromString(@"UIApplicationSceneManifest");
-    m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
+    Class manifest=NSClassFromString(@"UIApplicationSceneManifest");m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
     if(m){mtOrigSupportsMulti=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSupportsMulti);}
-    MTLog(@"[HYBRID-APP] installed config=%d role=%d multi=%d",mtOrigSceneConfigInit!=nil,mtOrigSessionRole!=nil,mtOrigSupportsMulti!=nil);
-    [[NSNotificationCenter defaultCenter] addObserverForName:UISceneDidActivateNotification object:nil queue:nil usingBlock:^(NSNotification *n){
-        UIScene *scene=n.object; NSString *sid=scene.session.persistentIdentifier?:@"";
-        MTLog(@"[HYBRID-APP] ACTIVATE sid=%@ role=%@ class=%@ screen=%@",sid,scene.session.role,NSStringFromClass(scene.class),[scene isKindOfClass:UIWindowScene.class]?((UIWindowScene*)scene).screen:nil);
-    }];
+    m=class_getInstanceMethod(UIApplication.class,@selector(setDelegate:));
+    if(m){mtOrigSetDelegate=method_getImplementation(m);method_setImplementation(m,(IMP)MTSetDelegate);}
+    MTInstallDelegate(UIApplication.sharedApplication.delegate);
+    for(NSString *name in @[UISceneWillConnectNotification,UISceneDidActivateNotification,UIApplicationDidBecomeActiveNotification]){
+        [[NSNotificationCenter defaultCenter]addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note){MTAppStart();}];
+    }
+    [[NSNotificationCenter defaultCenter]addObserverForName:UISceneDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){if(note.object==gAppCarWindow.windowScene)MTAppRestore();}];
+    MTAppStage("loaded");MTAppStart();
 }
+
 %hook DBDashboard
 - (void)_handleCarPlayUIReady {
     %orig;
@@ -270,6 +361,11 @@ static void MTHybridInstallAppBridge(void){
         %init;
         [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/MiniTa.txt" error:nil];
         MTLog(@"[DIRECT-BOOT] single controller, direct client, no proxy-template launch");
+        for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error"]){
+            NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:stage];
+            int token=0;
+            notify_register_dispatch(name.UTF8String,&token,dispatch_get_main_queue(),^(__unused int t){MTLog(@"[CLIENT80-IPC] %@",stage);});
+        }
         MTHybridInstallAdmission();
         [[NSNotificationCenter defaultCenter]addObserverForName:UISceneDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){
             if(note.object==gWindow.windowScene || [((UIScene*)note.object).session.persistentIdentifier containsString:@"DBDashboard-Car"]){MTLog(@"[DIRECT-DISCONNECT]");MTReset();}
