@@ -1,3 +1,13 @@
+# MiniTa 91 — sửa cơ chế App Bridge
+
+Bản thử rootless 0.3.1 sửa kênh đọc ON/OFF trong app: SpringBoard/Cài đặt xuất trạng thái qua Darwin notify; app không cần đọc được preference domain bên ngoài sandbox để biết mình được bật. Bổ sung bộ lọc UIKitCore. Đây là sửa nguyên nhân nghi ngờ sau khi bản 90 chỉ chạy YouTube; chưa có xác nhận thiết bị.
+
+Log `/var/mobile/MiniTa.txt` có `[CLIENT91] bundle=... stage=...` để phân biệt không nạp bridge, chưa có scene, chưa có root và đã gắn root. Không sửa mã TAsmart/A510 hoặc mặc định app đó không tương thích.
+
+Cài bản này rồi respring (cần SpringBoard xuất cấu hình); giữ app muốn thử ON, đóng hẳn và mở lại app, kết nối lại CarPlay. Nếu vẫn đen, gửi MiniTa.txt của bản 91. YouTube giữ cách layout riêng. Bản 88 được giữ nguyên ở checkpoint.
+
+---
+
 # MiniTa — App Bridge
 
 Jailbreak tweak đưa giao diện app iPhone được chọn lên Home CarPlay. Gói hiện tại dành cho Dopamine rootless, chưa kiểm chứng RootHide.

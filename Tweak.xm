@@ -20,7 +20,7 @@ static void MTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const MTBuild=@"90-APPBRIDGE";
+static NSString *const MTBuild=@"91-CONFIGBRIDGE";
 static void MTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
@@ -117,9 +117,37 @@ static NSUInteger gAppEpoch=0;
 static IMP mtOrigSceneConfigInit=nil,mtOrigSessionRole=nil;
 static IMP mtOrigSetDelegate=nil,mtOrigDelegateConfig=nil;
 static Class gPatchedDelegateClass=Nil;
+static NSArray<NSString *> *MTClientStages(void){
+    return @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"resized-safearea"];
+}
+static NSString *MTClientStatusName(NSString *bundle){return [@"com.sushibta.minita.client91." stringByAppendingString:bundle];}
+static NSMutableDictionary<NSString *,NSNumber *> *gClientObservers;
+static void MTObserveClients(void){
+    for(NSNumber *token in gClientObservers.allValues)notify_cancel(token.intValue);
+    gClientObservers=[NSMutableDictionary dictionary];
+    for(NSString *bundle in MTEnabledIdentifiers()){
+        int token=-1;
+        uint32_t result=notify_register_dispatch(MTClientStatusName(bundle).UTF8String,&token,dispatch_get_main_queue(),^(int t){
+            uint64_t state=0;notify_get_state(t,&state);
+            NSArray *stages=MTClientStages();
+            MTLog(@"[CLIENT91] bundle=%@ stage=%@",bundle,(state>0 && state<=stages.count)?stages[state-1]:@"not-loaded");
+        });
+        if(result==NOTIFY_STATUS_OK){
+            gClientObservers[bundle]=@(token);
+            uint64_t state=0;notify_get_state(token,&state);
+            NSArray *stages=MTClientStages();
+            MTLog(@"[CLIENT91-SNAPSHOT] bundle=%@ stage=%@",bundle,(state>0 && state<=stages.count)?stages[state-1]:@"not-loaded");
+        }
+    }
+}
 static void MTAppStage(const char *stage){
     NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:[NSString stringWithUTF8String:stage]];
     notify_post(name.UTF8String);MTLog(@"[CLIENT80] %s",stage);
+    static int token=-1;
+    NSString *status=MTClientStatusName(NSBundle.mainBundle.bundleIdentifier);
+    if(token<0 && notify_register_check(status.UTF8String,&token)!=NOTIFY_STATUS_OK){token=-1;return;}
+    NSUInteger index=[MTClientStages() indexOfObject:[NSString stringWithUTF8String:stage]];
+    if(index!=NSNotFound){notify_set_state(token,index+1);notify_post(status.UTF8String);}
 }
 // Lay out the live app at tablet width before mapping its coordinates to CarPlay.
 // UIKit performs inverse coordinate conversion for gestures in the transformed canvas.
@@ -277,7 +305,7 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 90 — Đang mở ứng dụng…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 91 — Đang mở ứng dụng…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -617,7 +645,7 @@ static void MTAlignNativeHost(id controller){
     @autoreleasepool {
         NSString *bundle=NSBundle.mainBundle.bundleIdentifier;
         MTReloadConfiguration();
-        if(MTEnabled(bundle)){
+        if(MTEligibleIdentifier(bundle) && MTReadPublishedEnabled(bundle,MTEnabled(bundle))){
             if(![NSBundle.mainBundle.bundlePath.pathExtension isEqualToString:@"app"])return;
             gAppClient=YES;
             gYouTubeLayout=[bundle isEqualToString:@"com.google.ios.youtube"];
@@ -631,10 +659,13 @@ static void MTAlignNativeHost(id controller){
         BOOL spring=[bundle isEqualToString:@"com.apple.springboard"];
         BOOL daemon=[NSProcessInfo.processInfo.processName isEqualToString:@"carplayd"];
         if(!car && !spring && !daemon)return;
+        if(spring)MTPublishEnabledApps([NSSet setWithArray:MTEnabledIdentifiers()]);
         int preferencesToken=0;
         notify_register_dispatch(MTPreferencesChanged,&preferencesToken,dispatch_get_main_queue(),^(__unused int token){
             MTReloadConfiguration();
+            if(spring)MTPublishEnabledApps([NSSet setWithArray:MTEnabledIdentifiers()]);
             [gHomeIcons removeAllObjects];
+            if(car)MTObserveClients();
             MTLog(@"[APPBRIDGE-CONFIG] %@; reconnect CarPlay after changing apps",MTEnabledIdentifiers());
         });
         dlopen("/System/Library/PrivateFrameworks/CarKit.framework/CarKit",RTLD_NOW);
@@ -643,6 +674,7 @@ static void MTAlignNativeHost(id controller){
         %init;
         [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/MiniTa.txt" error:nil];
         MTLog(@"[DIRECT-BOOT] native Home icon launch; no automatic Maps launch or overlay host");
+        MTObserveClients();
         for(NSString *stage in @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"resized-safearea"]){
             NSString *name=[@"com.sushibta.minita.client80." stringByAppendingString:stage];
             int token=0;
@@ -652,4 +684,3 @@ static void MTAlignNativeHost(id controller){
 
     }
 }
-

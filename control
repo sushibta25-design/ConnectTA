@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.3.0
+Version: 0.3.1
 Architecture: iphoneos-arm64
-Description: MiniTa 90 experimental per-app CarPlay bridge with Settings switches.
+Description: MiniTa 91 cross-process app selection and per-app bridge diagnostics.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks

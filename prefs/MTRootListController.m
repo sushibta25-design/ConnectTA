@@ -18,7 +18,7 @@ static id MTValue(id object,NSString *key){
 - (NSMutableArray *)specifiers {
     if(_specifiers)return _specifiers;
     NSMutableArray *items=[NSMutableArray array];
-    PSSpecifier *intro=[PSSpecifier groupSpecifierWithName:@"MiniTa 90 • Rootless"];
+    PSSpecifier *intro=[PSSpecifier groupSpecifierWithName:@"MiniTa 91 • Rootless"];
     [intro setProperty:@"Bật app để đưa giao diện iPhone lên CarPlay. Ngắt CarPlay trước khi đổi. Sau đó đóng hẳn và mở lại app trên iPhone, respring rồi kết nối lại CarPlay. Tắt CarBridge cho cùng app. Chỉ dùng video khi xe đỗ." forKey:@"footerText"];
     [items addObject:intro];
     PSSpecifier *reset=[PSSpecifier preferenceSpecifierNamed:@"Tắt toàn bộ App Bridge" target:self set:NULL get:NULL detail:Nil cell:PSButtonCell edit:Nil];
@@ -66,7 +66,7 @@ static id MTValue(id object,NSString *key){
     NSArray *identifiers=[[apps allObjects] sortedArrayUsingSelector:@selector(compare:)];
     CFPreferencesSetValue(CFSTR("EnabledApps"),(__bridge CFArrayRef)identifiers,MTPreferencesDomain,kCFPreferencesCurrentUser,kCFPreferencesAnyHost);
     BOOL saved=CFPreferencesSynchronize(MTPreferencesDomain,kCFPreferencesCurrentUser,kCFPreferencesAnyHost);
-    if(saved)notify_post(MTPreferencesChanged);
+    if(saved){MTPublishEnabledApps(apps);notify_post(MTPreferencesChanged);}
     else {
         UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Chưa lưu được" message:@"Không ghi được cài đặt MiniTa. Hãy thử lại." preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];

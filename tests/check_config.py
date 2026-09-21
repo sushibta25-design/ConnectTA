@@ -19,6 +19,9 @@ assert 'MTEligibleIdentifier(identifier)' in config
 assert 'if(![stored isKindOfClass:NSArray.class])' in config
 assert 'CFPreferencesSetValue(CFSTR("EnabledApps")' in prefs
 assert 'notify_post(MTPreferencesChanged)' in prefs
+assert 'MTReadPublishedEnabled(bundle,MTEnabled(bundle))' in source
+assert 'if(spring)MTPublishEnabledApps' in source
+assert 'com.apple.UIKitCore' in (root / 'MiniTa.plist').read_text()
 assert 'notify_register_dispatch(MTPreferencesChanged' in source
 assert 'com.apple.UIKit' in (root / 'MiniTa.plist').read_text()
 assert 'SUBPROJECTS += prefs' in (root / 'Makefile').read_text()
