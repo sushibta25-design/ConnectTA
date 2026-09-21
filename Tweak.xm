@@ -7,7 +7,8 @@ static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
 static id gMTHybridNativeLaunchArg=nil;
 static __weak id gMTHybridDashboard=nil;
 static id gYTController=nil; static NSDictionary *gYTSettings=nil;
-static NSDictionary *gNativeDashboardSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil; static id gDirectYTScene=nil;
+static NSDictionary *gNativeDashboardSettings=nil;
+static BOOL gAllowNativeVCBuild=NO; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil; static id gDirectYTScene=nil;
 static void MTValidateYouTubeInDashboard(void);
 static void MTProbeRealYouTubeIdentity(void);
 static void MTTryLaunchYouTubeProcess(void);
@@ -247,7 +248,7 @@ static void MTValidateYouTubeInDashboard(void){
     }@catch(NSException*e){MTLog(@"[DASH] ERROR %@ %@",e.name,e.reason);}
 }
 static BOOL gDidLaunchYT=NO;
-static void MTTryDashboardLaunchYouTube(void){if(gPresentation)return;
+static void MTTryDashboardLaunchYouTube(void){if(gNativeDashboardSettings&&!gAllowNativeVCBuild){MTLog(@"[LEGACY-BYPASS] native contract present; no MusicUIService DBEvent launch");return;}if(gPresentation)return;
     if(gDidLaunchYT||!gYTAppInfo||!gDashboardEnv)return;
     SEL launch=NSSelectorFromString(@"_launchAppWithInfo:forURL:");
     if(![gDashboardEnv respondsToSelector:launch]){MTLog(@"[LAUNCH] selector missing");return;}
@@ -886,7 +887,7 @@ static void MTHybridInstallAppBridge(void){
     if(NO && !directSelectionFired && gYTAppInfo){directSelectionFired=YES;MTLog(@"[DIRECT-SELECT] native open event received; creating armed YouTube direct scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.15*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryCreateDirectYouTubeScene();});}
     id ctx=MTV(event,@"context");
     if(!ctx){@try{ctx=[event valueForKey:@"_context"];}@catch(__unused NSException*e){}}
-    id seedInfo=ctx;id nativeApp=MTV(seedInfo,@"application");if(!nativeApp){id vv=MTV(ctx,@"value");if(vv){seedInfo=vv;nativeApp=MTV(vv,@"application");}}NSString *nativeBundle=MTV(nativeApp,@"bundleIdentifier");if(!nativeBundle)nativeBundle=MTV(nativeApp,@"applicationIdentifier");MTLog(@"[DUO-SEED-CHECK] ctx=%@ seedInfo=%@ app=%@ bundle=%@",ctx,seedInfo,nativeApp,nativeBundle);if([nativeBundle isEqualToString:@"com.google.Maps"]||[nativeBundle isEqualToString:@"com.apple.Maps"]){gMTHybridNativeLaunchArg=seedInfo;gNativeDashboardSettings=[MTV(seedInfo,@"activationSettings") copy];MTLog(@"[DUO-SEED] captured native %@ launch contract settings=%@",nativeBundle,gNativeDashboardSettings);gDidLaunchYT=NO;dispatch_async(dispatch_get_main_queue(),^{MTTryDashboardLaunchYouTube();});}
+    id seedInfo=ctx;id nativeApp=MTV(seedInfo,@"application");if(!nativeApp){id vv=MTV(ctx,@"value");if(vv){seedInfo=vv;nativeApp=MTV(vv,@"application");}}NSString *nativeBundle=MTV(nativeApp,@"bundleIdentifier");if(!nativeBundle)nativeBundle=MTV(nativeApp,@"applicationIdentifier");MTLog(@"[DUO-SEED-CHECK] ctx=%@ seedInfo=%@ app=%@ bundle=%@",ctx,seedInfo,nativeApp,nativeBundle);if([nativeBundle isEqualToString:@"com.google.Maps"]||[nativeBundle isEqualToString:@"com.apple.Maps"]){gMTHybridNativeLaunchArg=seedInfo;gNativeDashboardSettings=[MTV(seedInfo,@"activationSettings") copy];MTLog(@"[DUO-SEED] captured native %@ launch contract settings=%@",nativeBundle,gNativeDashboardSettings);gAllowNativeVCBuild=YES;gDidLaunchYT=NO;dispatch_async(dispatch_get_main_queue(),^{MTTryDashboardLaunchYouTube();gAllowNativeVCBuild=NO;});gDidLaunchYT=NO;dispatch_async(dispatch_get_main_queue(),^{MTTryDashboardLaunchYouTube();});}
     if(ctx){
         MTLog(@"[HYBRID-CONTEXT] value=%@ class=%@",ctx,NSStringFromClass([ctx class]));
         static BOOL onceA=NO;if(!onceA){onceA=YES;Class px=NSClassFromString(@"LSApplicationProxy");Class ic=NSClassFromString(@"DBApplicationInfo");id pp=((id(*)(id,SEL,id))objc_msgSend)(px,NSSelectorFromString(@"applicationProxyForIdentifier:"),@"com.google.ios.youtube");id localYT=((id(*)(id,SEL,id))objc_msgSend)([ic alloc],NSSelectorFromString(@"initWithApplicationProxy:"),pp);MTLog(@"[TEST-A] localYT=%@",localYT);Class c=NSClassFromString(@"DBApplicationLaunchInfo");SEL z=NSSelectorFromString(@"initWithApplication:activationSettings:");id as=MTV(ctx,@"activationSettings");if(c&&[[c alloc] respondsToSelector:z]){id y=((id(*)(id,SEL,id,id))objc_msgSend)([c alloc],z,localYT,as);MTLog(@"[TEST-A] launchInfo=%@ app=%@",y,MTV(y,@"application"));if(gMTHybridDashboard)((void(*)(id,SEL,id,id))objc_msgSend)(gMTHybridDashboard,NSSelectorFromString(@"_launchAppWithInfo:forURL:"),y,nil);}}
