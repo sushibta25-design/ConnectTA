@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.2.87
+Version: 0.2.88
 Architecture: iphoneos-arm64
-Description: MiniTa 87 host dock viewport and zero-origin client window.
+Description: MiniTa 88 native controller proxy removal and scene host alignment.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks

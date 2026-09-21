@@ -6,7 +6,7 @@
 #import <dlfcn.h>
 #import <math.h>
 
-static NSString *const MTBuild=@"87-VIEWPORT";
+static NSString *const MTBuild=@"88-HOSTALIGN";
 static id gEnvironment=nil, gYouTubeInfo=nil, gController=nil;
 static NSDictionary *gActivation=nil;
 static UIWindow *gWindow=nil;
@@ -368,7 +368,7 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 87 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 88 — Đang mở YouTube…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -618,6 +618,68 @@ static CGRect MTNativeAppViewport(id dashboard,CGRect original){
           NSStringFromCGRect(original),NSStringFromCGRect(display),NSStringFromUIEdgeInsets(insets),NSStringFromCGRect(viewport));
     return viewport;
 }
+static char kMTAligning88,kMTLastGeometry88;
+static void MTAlignNativeHost(id controller){
+    if(!MTIsYouTube(MTV(controller,@"applicationInfo")))return;
+    if([objc_getAssociatedObject(controller,&kMTAligning88) boolValue])return;
+    UIViewController *vc=(UIViewController*)controller;
+    if(!vc.isViewLoaded || !vc.view.window || !vc.view.superview)return;
+    UIView *root=vc.view;
+    UIView *host=MTV(controller,@"sceneHostView");
+    if(![host isKindOfClass:UIView.class] || !host.superview || ![host isDescendantOfView:root])return;
+    UIWindowScene *scene=root.window.windowScene;
+    if(!scene)return;
+    objc_setAssociatedObject(controller,&kMTAligning88,@YES,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    @try{
+        CGRect before=[root convertRect:root.bounds toCoordinateSpace:scene.coordinateSpace];
+        CGRect target=MTNativeAppViewport(MTV(controller,@"environment"),before);
+        CGRect local=[root.superview convertRect:target fromCoordinateSpace:scene.coordinateSpace];
+        // Convert screen geometry through the actual parent. Never add 45 points
+        // blindly: the parent may already be positioned beyond the dock.
+        if(CGAffineTransformIsIdentity(root.transform) && !CGRectEqualToRect(root.frame,local))root.frame=local;
+        CGRect hostLocal=[host.superview convertRect:root.bounds fromView:root];
+        if(CGAffineTransformIsIdentity(host.transform) && !CGRectEqualToRect(host.frame,hostLocal))host.frame=hostLocal;
+        CGRect actual=[host convertRect:host.bounds toCoordinateSpace:scene.coordinateSpace];
+        NSString *state=[NSString stringWithFormat:@"rootBefore=%@ target=%@ root=%@ hostFrame=%@ hostScreen=%@ parent=%@ proxy=%@",
+            NSStringFromCGRect(before),NSStringFromCGRect(target),NSStringFromCGRect(root.frame),
+            NSStringFromCGRect(host.frame),NSStringFromCGRect(actual),NSStringFromClass(root.superview.class),MTV(controller,@"proxyApplicationInfo")];
+        if(![state isEqual:objc_getAssociatedObject(controller,&kMTLastGeometry88)]){
+            objc_setAssociatedObject(controller,&kMTLastGeometry88,state,OBJC_ASSOCIATION_COPY_NONATOMIC);
+            MTLog(@"[HOST88-ALIGN] %@",state);
+        }
+    }@catch(NSException *e){MTLog(@"[HOST88-ERROR] %@",e);}
+    @finally{objc_setAssociatedObject(controller,&kMTAligning88,@NO,OBJC_ASSOCIATION_RETAIN_NONATOMIC);}
+}
+%hook DBApplicationSceneViewController
+- (id)initWithApplicationInfo:(id)app proxyApplicationInfo:(id)proxy environment:(id)environment {
+    if(MTIsYouTube(app)){
+        MTLog(@"[HOST88-INIT] remove controller proxy=%@",proxy);
+        proxy=nil;
+    }
+    return %orig(app,proxy,environment);
+}
+- (id)_initWithApplicationInfo:(id)app proxyApplicationInfo:(id)proxy environment:(id)environment {
+    if(MTIsYouTube(app))proxy=nil;
+    return %orig(app,proxy,environment);
+}
+- (BOOL)presentsUnderStatusBar {
+    if(MTIsYouTube(MTV(self,@"applicationInfo")))return NO;
+    return %orig;
+}
+- (void)viewDidLayoutSubviews {
+    %orig;
+    MTAlignNativeHost(self);
+}
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    MTAlignNativeHost(self);
+}
+- (void)setSceneHostView:(id)view {
+    %orig;
+    dispatch_async(dispatch_get_main_queue(),^{MTAlignNativeHost(self);});
+}
+%end
+
 %hook DBDashboard
 - (CGRect)sceneFrameForAppInfo:(id)app {
     CGRect frame=%orig;
