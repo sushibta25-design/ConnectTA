@@ -257,7 +257,7 @@ static void MTTryDashboardLaunchYouTube(void){
         Class li=NSClassFromString(@"DBApplicationLaunchInfo");
         SEL initLI=NSSelectorFromString(@"initWithApplication:activationSettings:");
         if(!li || ![li instancesRespondToSelector:initLI]) { MTLog(@"[LAUNCH] launchInfo class/init missing"); gDidLaunchYT=NO; return; }
-        NSDictionary *activation=@{@"DBActivationSettingLaunchSource":@"MiniTa"};
+        NSDictionary *activation=nil;id native=gMTHybridNativeLaunchArg;if(native){id nas=MTV(native,@"activationSettings");if([nas isKindOfClass:NSDictionary.class])activation=[nas copy];}if(!activation){MTLog(@"[DUO-LAUNCH] waiting for native activationSettings contract");gDidLaunchYT=NO;return;}NSMutableDictionary *ma=[activation mutableCopy];ma[@"DBActivationSettingLaunchSource"]=activation[@"DBActivationSettingLaunchSource"]?:@"MiniTa";activation=[ma copy];MTLog(@"[DUO-LAUNCH] cloned native activationSettings=%@",activation);
         id launchInfo=((id(*)(id,SEL,id,id))objc_msgSend)([li alloc],initLI,gYTAppInfo,activation);
         MTLog(@"[LAUNCH] launchInfo=%@ application=%@ settings=%@",launchInfo,MTV(launchInfo,@"application"),MTV(launchInfo,@"activationSettings"));
         ((void(*)(id,SEL,id,id))objc_msgSend)(gDashboardEnv,launch,launchInfo,nil);
