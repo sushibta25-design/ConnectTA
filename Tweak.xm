@@ -881,6 +881,7 @@ static void MTHybridInstallAppBridge(void){
     static BOOL directSelectionFired=NO;
     if(NO && !directSelectionFired && gYTAppInfo){directSelectionFired=YES;MTLog(@"[DIRECT-SELECT] native open event received; creating armed YouTube direct scene");dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.15*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTTryCreateDirectYouTubeScene();});}
     id ctx=MTV(event,@"context");
+    id nativeApp=MTV(ctx,@"application");NSString *nativeBundle=MTV(nativeApp,@"bundleIdentifier");if(!nativeBundle)nativeBundle=MTV(nativeApp,@"applicationIdentifier");if([nativeBundle isEqualToString:@"com.google.Maps"]||[nativeBundle isEqualToString:@"com.apple.Maps"]){gMTHybridNativeLaunchArg=ctx;MTLog(@"[DUO-SEED] captured native %@ launch contract settings=%@",nativeBundle,MTV(ctx,@"activationSettings"));gDidLaunchYT=NO;dispatch_async(dispatch_get_main_queue(),^{MTTryDashboardLaunchYouTube();});}
     if(!ctx){@try{ctx=[event valueForKey:@"_context"];}@catch(__unused NSException*e){}}
     if(ctx){
         MTLog(@"[HYBRID-CONTEXT] value=%@ class=%@",ctx,NSStringFromClass([ctx class]));
