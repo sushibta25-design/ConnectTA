@@ -765,7 +765,8 @@ static void MTHybridRefreshRosterAndActivate(void){
             SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
             if([dash respondsToSelector:pre])MTLog(@"[HYBRID-ROSTER] preflight=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(dash,pre,ai));
             static BOOL rosterDirectStarted=NO;
-            if(!rosterDirectStarted){rosterDirectStarted=YES;gYTAppInfo=ai;MTLog(@"[DIRECT-ROSTER] appInfo=%@ ready; DuoPhone primitive mode",gYTAppInfo);}
+            if(!rosterDirectStarted){rosterDirectStarted=YES;gYTAppInfo=ai;MTLog(@"[DIRECT-ROSTER] appInfo=%@ ready; DuoPhone primitive mode",gYTAppInfo);
+            @try{Class px=NSClassFromString(@"LSApplicationProxy");Class ic=NSClassFromString(@"DBApplicationInfo");id mp=((id(*)(id,SEL,id))objc_msgSend)(px,NSSelectorFromString(@"applicationProxyForIdentifier:"),@"com.google.Maps");id mi=mp?((id(*)(id,SEL,id))objc_msgSend)([ic alloc],NSSelectorFromString(@"initWithApplicationProxy:"),mp):nil;if(mi){id ms=nil;SEL sf=NSSelectorFromString(@"sceneForAppInfo:");if([dash respondsToSelector:sf])ms=((id(*)(id,SEL,id))objc_msgSend)(dash,sf,mi);MTLog(@"[DUO-MAPS] info=%@ existingScene=%@",mi,ms);}}@catch(NSException*e){MTLog(@"[DUO-MAPS] ERROR %@ %@",e.name,e.reason);}}
             MTLog(@"[HYBRID-ROSTER] DBApplicationInfo is not launchInfo; waiting to capture native launch contract. sample=%@",gMTHybridNativeLaunchArg);
         }
     }@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] ERROR %@ %@",e.name,e.reason);}
