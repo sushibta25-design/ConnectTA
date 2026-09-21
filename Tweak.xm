@@ -5,6 +5,7 @@
 #import <notify.h>
 #import <dlfcn.h>
 #import "MTConfig.h"
+#import "MTAdaptiveLayout.h"
 
 static NSSet<NSString *> *gEnabledApps;
 static BOOL gAppClient=NO, gYouTubeLayout=NO;
@@ -20,7 +21,7 @@ static void MTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const MTBuild=@"91-CONFIGBRIDGE";
+static NSString *const MTBuild=@"92-ADAPTIVE";
 static void MTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
@@ -95,21 +96,6 @@ static void MTHybridInstallAdmission(void){
     MTLog(@"[HYBRID-ADMIT] installed info=%d ent2=%d ent3=%d",mtOrigInfo!=nil,mtOrigEnt2!=nil,mtOrigEnt3!=nil);
 }
 
-// Set tablet identity before YouTube creates/caches its UI.
-// Scoped by explicit Logos group initialization to the YouTube process only.
-%group MTTabletIdentity
-%hook UIDevice
-- (UIUserInterfaceIdiom)userInterfaceIdiom {
-    return UIUserInterfaceIdiomPad;
-}
-%end
-%hook UITraitCollection
-- (UIUserInterfaceIdiom)userInterfaceIdiom {
-    return UIUserInterfaceIdiomPad;
-}
-%end
-%end
-
 static UIWindow *gAppCarWindow=nil, *gDonorWindow=nil;
 static UIViewController *gMovedRoot=nil, *gDonorPlaceholder=nil;
 static BOOL gAppPumpRunning=NO;
@@ -149,13 +135,16 @@ static void MTAppStage(const char *stage){
     NSUInteger index=[MTClientStages() indexOfObject:[NSString stringWithUTF8String:stage]];
     if(index!=NSNotFound){notify_set_state(token,index+1);notify_post(status.UTF8String);}
 }
-// Lay out the live app at tablet width before mapping its coordinates to CarPlay.
+// Reflow the live child at a stable density as the CarPlay viewport changes.
 // UIKit performs inverse coordinate conversion for gestures in the transformed canvas.
 @interface MTTabletContainer : UIViewController
 @property(nonatomic,strong) UIViewController *content;
 @property(nonatomic,strong) UIView *canvas;
 @property(nonatomic,strong) NSArray<NSLayoutConstraint *> *contentConstraints;
 @property(nonatomic,assign) CGRect reportedViewport;
+@property(nonatomic,assign) BOOL layoutModeInitialized;
+@property(nonatomic,assign) BOOL tabletMode;
+@property(nonatomic,assign) BOOL applyingLayout;
 @property(nonatomic,assign) CGSize originalPreferredSize;
 @property(nonatomic,assign) BOOL originalTranslates;
 @property(nonatomic,assign) BOOL originalPresentationContext;
@@ -186,15 +175,6 @@ static void MTAppStage(const char *stage){
     self.canvas.backgroundColor=UIColor.blackColor;
     [self.view addSubview:self.canvas];
     [self addChildViewController:self.content];
-    if(gYouTubeLayout){
-    UITraitCollection *traits=[UITraitCollection traitCollectionWithTraitsFromCollections:@[
-        [UITraitCollection traitCollectionWithUserInterfaceIdiom:UIUserInterfaceIdiomPad],
-        [UITraitCollection traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassRegular],
-        [UITraitCollection traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular],
-        [UITraitCollection traitCollectionWithPreferredContentSizeCategory:UIContentSizeCategoryMedium]
-    ]];
-    [self setOverrideTraitCollection:traits forChildViewController:self.content];
-    }
     UIView *v=self.content.view;
     v.transform=CGAffineTransformIdentity;
     v.translatesAutoresizingMaskIntoConstraints=NO;
@@ -229,9 +209,27 @@ static void MTAppStage(const char *stage){
     // the head unit places it. Do not hard-code screen width or dock thickness.
     CGRect viewport=CGRectIntersection(self.view.bounds,self.view.safeAreaLayoutGuide.layoutFrame);
     if(CGRectIsNull(viewport) || CGRectIsEmpty(viewport))return;
-    if(CGRectEqualToRect(viewport,self.reportedViewport))return;
+    if(self.applyingLayout || CGRectEqualToRect(viewport,self.reportedViewport))return;
+    self.applyingLayout=YES;
+    @try {
     self.reportedViewport=viewport;
-    CGFloat logicalWidth=gYouTubeLayout?1024.0:viewport.size.width;
+    CGFloat logicalWidth=gYouTubeLayout?MTYouTubeLogicalWidth(viewport.size.width):viewport.size.width;
+    if(gYouTubeLayout){
+        BOOL tablet=MTYouTubeTabletMode(logicalWidth,self.layoutModeInitialized,self.tabletMode);
+        if(!self.layoutModeInitialized || tablet!=self.tabletMode){
+            self.tabletMode=tablet;self.layoutModeInitialized=YES;
+            UITraitCollection *traits=[UITraitCollection traitCollectionWithTraitsFromCollections:@[
+                [UITraitCollection traitCollectionWithUserInterfaceIdiom:tablet?UIUserInterfaceIdiomPad:UIUserInterfaceIdiomPhone],
+                [UITraitCollection traitCollectionWithHorizontalSizeClass:tablet?UIUserInterfaceSizeClassRegular:UIUserInterfaceSizeClassCompact],
+                [UITraitCollection traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular],
+                [UITraitCollection traitCollectionWithPreferredContentSizeCategory:UIContentSizeCategoryMedium]
+            ]];
+            [self setOverrideTraitCollection:traits forChildViewController:self.content];
+            // UIKit propagates the override through the existing controller tree.
+            // Do not recreate controllers or touch playback to change the layout.
+            MTLog(@"[ADAPTIVE92] mode=%@ viewport=%@ logicalWidth=%.1f",tablet?@"ipad":@"phone",NSStringFromCGRect(viewport),logicalWidth);
+        }
+    }
     CGFloat scale=viewport.size.width/logicalWidth;
     CGSize logical=CGSizeMake(logicalWidth,viewport.size.height/scale);
     self.canvas.bounds=(CGRect){CGPointZero,logical};
@@ -247,7 +245,7 @@ static void MTAppStage(const char *stage){
           NSStringFromUIEdgeInsets(self.view.safeAreaInsets),NSStringFromCGRect(viewport),
           NSStringFromCGSize(logical),NSStringFromCGRect(self.content.view.bounds),scale);
     MTAppStage("resized-safearea");
-
+    } @finally {self.applyingLayout=NO;}
 }
 - (BOOL)shouldAutorotate{return YES;}
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations{return UIInterfaceOrientationMaskLandscape;}
@@ -305,7 +303,7 @@ static void MTAppPump(NSUInteger attempt,NSUInteger epoch){
             loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
             UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
             label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            label.text=@"MiniTa 91 — Đang mở ứng dụng…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            label.text=@"MiniTa 92 — Đang mở ứng dụng…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
             [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
             [gAppCarWindow makeKeyAndVisible];MTAppStage("window");
         }
@@ -649,9 +647,6 @@ static void MTAlignNativeHost(id controller){
             if(![NSBundle.mainBundle.bundlePath.pathExtension isEqualToString:@"app"])return;
             gAppClient=YES;
             gYouTubeLayout=[bundle isEqualToString:@"com.google.ios.youtube"];
-            if(gYouTubeLayout){
-                %init(MTTabletIdentity);
-            }
             MTLog(@"[APPBRIDGE-CLIENT] bundle=%@ tablet=%d",bundle,gYouTubeLayout);
             MTHybridInstallAppBridge();return;
         }

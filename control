@@ -1,8 +1,8 @@
 Package: com.sushibta.minita
 Name: MiniTa
-Version: 0.3.1
+Version: 0.3.2
 Architecture: iphoneos-arm64
-Description: MiniTa 91 cross-process app selection and per-app bridge diagnostics.
+Description: MiniTa 92 experimental adaptive YouTube phone and tablet layout.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks

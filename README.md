@@ -1,3 +1,19 @@
+# MiniTa 92 — adaptive YouTube experiment
+
+Rootless package version 0.3.2. Based on build 91; checkpoint-91-configbridge and checkpoint-88-host-working remain available.
+
+YouTube now receives phone/compact traits in a narrow CarPlay pane and iPad/regular traits in a wide pane. The original app controller is retained; this code does not seek, pause, restart or replace the player. Global UIDevice/UITraitCollection idiom hooks have been removed. The override is removed when the content returns to the iPhone.
+
+A stable density of 2.4 logical points per CarPlay point replaces the fixed 1024-point canvas. First layout uses iPad at logical width 700 or greater. Subsequently it switches to phone at 620 or below, and back to iPad at 700 or above. The gap prevents mode flicker around the divider threshold. These are experimental tuning values.
+
+Validation: C tests exercise both directions and hysteresis; package checks validate configuration. UIKit/YouTube behavior still requires a device test. YouTube may cache device identity rather than honor changing child traits. Split software must deliver actual pane dimensions to the client scene; host-only scaling cannot trigger this layout. Build 92 does not modify the split engine.
+
+Device check: fully close YouTube before reconnecting after installation. Compare narrow and wide Home layouts, then drag the divider with a video playing and check continuity and touch alignment. Disconnect and verify ordinary iPhone layout. Client log contains ADAPTIVE92 with mode, viewport and logical width.
+
+Known separate issues: reverse-camera playback recovery remains unresolved; leave TAsmart OFF in MiniTa to preserve its working CarPlay route.
+
+---
+
 # MiniTa 91 — sửa cơ chế App Bridge
 
 Bản thử rootless 0.3.1 sửa kênh đọc ON/OFF trong app: SpringBoard/Cài đặt xuất trạng thái qua Darwin notify; app không cần đọc được preference domain bên ngoài sandbox để biết mình được bật. Bổ sung bộ lọc UIKitCore. Đây là sửa nguyên nhân nghi ngờ sau khi bản 90 chỉ chạy YouTube; chưa có xác nhận thiết bị.

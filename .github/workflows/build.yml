@@ -19,10 +19,13 @@ jobs:
           curl -L -o /tmp/sdk.tar.xz https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
           tar -xf /tmp/sdk.tar.xz -C $HOME/theos/sdks
       - name: Validate configuration
-        run: python3 tests/check_config.py
+        run: |
+          python3 tests/check_config.py
+          cc tests/adaptive_layout.c -o /tmp/minita-layout-test
+          /tmp/minita-layout-test
       - run: make clean package FINALPACKAGE=1
       - uses: actions/upload-artifact@v4
         with:
-          name: MINITA-91-CONFIGBRIDGE-ROOTLESS
+          name: MINITA-92-ADAPTIVE-ROOTLESS
           path: packages/*.deb
           if-no-files-found: error

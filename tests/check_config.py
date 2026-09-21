@@ -13,8 +13,8 @@ for path in (root / 'prefs/Resources/Info.plist', root / 'layout/Library/Prefere
 assert 'MTHomeIncludeApps' in source
 assert 'MTIsYouTube' not in source
 assert 'MTTryDirectLaunch' not in source and 'MTHostTick' not in source
-assert 'gYouTubeLayout?1024.0:viewport.size.width' in source
-assert re.search(r'if\(gYouTubeLayout\)\s*\{\s*%init\(MTTabletIdentity\)', source)
+assert 'gYouTubeLayout?MTYouTubeLogicalWidth(viewport.size.width):viewport.size.width' in source
+assert 'MTTabletIdentity' not in source
 assert 'MTEligibleIdentifier(identifier)' in config
 assert 'if(![stored isKindOfClass:NSArray.class])' in config
 assert 'CFPreferencesSetValue(CFSTR("EnabledApps")' in prefs
