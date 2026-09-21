@@ -949,6 +949,21 @@ static BOOL didCapturedRefg=NO;if(!didCapturedRefg&&[gYTSettings isKindOfClass:N
  %orig;
 }
 %end
+
+%hook DBSceneUpdate
+- (id)initWithApplicationInfo:(id)app environment:(id)env {
+    id r=%orig;
+    NSString *bid=nil; @try{bid=MTV(app,@"bundleIdentifier");} @catch(...){}
+    if(env && [bid isEqualToString:@"com.google.Maps"]){gNativeSceneEnvironment=env;MTLog(@"[ENV-HOOK] maps init2 env=%@ class=%@",env,NSStringFromClass([env class]));}
+    return r;
+}
+- (id)initWithApplicationInfo:(id)app proxyApplicationInfo:(id)proxy environment:(id)env activationSettings:(id)settings {
+    id r=%orig;
+    NSString *bid=nil; @try{bid=MTV(app,@"bundleIdentifier");} @catch(...){}
+    if(env && [bid isEqualToString:@"com.google.Maps"]){gNativeSceneEnvironment=env;MTLog(@"[ENV-HOOK] maps init4 env=%@ proxy=%@ settings=%@",env,proxy,settings);}
+    return r;
+}
+%end
 %ctor{@autoreleasepool{
     NSString *bundle=NSBundle.mainBundle.bundleIdentifier?:@"";
     if([bundle isEqualToString:@"com.google.ios.youtube"]){
