@@ -1,0 +1,2 @@
+{ Filter = { Bundles = ("com.apple.UIKit", "com.apple.UIKitCore", "com.apple.CarPlayApp", "com.apple.springboard"); Executables = ("carplayd"); Mode = "Any"; }; }
+

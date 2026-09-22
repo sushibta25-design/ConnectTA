@@ -1,8 +1,8 @@
-name: Build MiniTa Probe
+name: Build ConnectTA App Bridge
 on:
   workflow_dispatch:
   push:
-    branches: [ main, test-launchinfo-A, test-event-B ]
+    branches: [ main ]
 jobs:
   build:
     runs-on: macos-14
@@ -18,9 +18,12 @@ jobs:
           mkdir -p $HOME/theos/sdks
           curl -L -o /tmp/sdk.tar.xz https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
           tar -xf /tmp/sdk.tar.xz -C $HOME/theos/sdks
+      - name: Validate configuration
+        run: python3 tests/check_config.py
       - run: make clean package FINALPACKAGE=1
       - uses: actions/upload-artifact@v4
         with:
-          name: MINITA-${{ github.ref_name }}-ROOTLESS
+          name: ConnectTA-0.4.0-ROOTLESS
           path: packages/*.deb
           if-no-files-found: error
+

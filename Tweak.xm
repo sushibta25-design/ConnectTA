@@ -2,761 +2,49 @@
 #import <Foundation/Foundation.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <notify.h>
+#import <dlfcn.h>
+#import "CTConfig.h"
 
-static NSString *const MTLogPath=@"/var/mobile/MiniTa.txt";
-static id gMTHybridNativeLaunchArg=nil;
-static __weak id gMTHybridDashboard=nil;
-static id gYTController=nil; static NSDictionary *gYTSettings=nil; static id gYTAppInfo=nil; static id gDashboardEnv=nil; static id gCarDisplayConfig=nil; static id gDirectYTScene=nil;
-static void MTValidateYouTubeInDashboard(void);
-static void MTProbeRealYouTubeIdentity(void);
-static void MTTryLaunchYouTubeProcess(void);
-static void MTProbeValidClientIdentity(void);
-static void MTBuildDirectDefinitionProbe(void);
-static void MTTryCreateDirectYouTubeScene(void);
-static void MTProbeDirectSceneActivation(id scene);
-static void MTTryActivateDirectYouTubeScene(id scene);
-static void MTProbeDirectSceneObjects(void);
-static void MTProbeDirectSceneInputs(void);
-static void MTTryDashboardLaunchYouTube(void); static UIWindow *gHostWindow=nil; static UIView *gPresentation=nil;
-static void MTLog(NSString *fmt,...){va_list a;va_start(a,fmt);NSString*m=[[NSString alloc]initWithFormat:fmt arguments:a];va_end(a);NSData*d=[[m stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];NSFileHandle*h=[NSFileHandle fileHandleForWritingAtPath:MTLogPath];if(!h){[d writeToFile:MTLogPath atomically:YES];return;}[h seekToEndOfFile];[h writeData:d];[h closeFile];}
-static id MTV(id o,NSString*k){@try{return[o valueForKey:k];}@catch(__unused NSException*e){return nil;}}
-static NSString *MTBundleFromSID(NSString *sid){if(![sid isKindOfClass:NSString.class])return nil;for(NSString*p in [sid componentsSeparatedByString:@":"])if([p isEqualToString:@"com.google.ios.youtube"])return p;return nil;}
-static UIWindowScene *MTCarScene(void){for(UIScene*s in UIApplication.sharedApplication.connectedScenes)if([s isKindOfClass:UIWindowScene.class]){UIWindowScene*w=(UIWindowScene*)s;CGSize z=w.coordinateSpace.bounds.size;if(z.width>300&&z.height<=500)return w;}return nil;}
-static void MTHostYouTube(void){
- if(!gYTController||!gYTSettings){MTLog(@"[HOST] no captured YouTube controller");return;}
- UIWindowScene*scene=MTCarScene();if(!scene){MTLog(@"[HOST] no CarPlay scene");return;}
- SEL fg=NSSelectorFromString(@"foregroundSceneWithSettings:completion:");SEL pv=NSSelectorFromString(@"presentationViewWithIdentifier:");
- if(![gYTController respondsToSelector:fg]||![gYTController respondsToSelector:pv]){MTLog(@"[HOST] APIs missing controller=%@",NSStringFromClass([gYTController class]));return;}
- @try{
-   ((void(*)(id,SEL,id,id))objc_msgSend)(gYTController,fg,gYTSettings,nil);
-   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.7*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-     NSString*pid=@"com.sushibta.minita.youtube";
-     id v=((id(*)(id,SEL,id))objc_msgSend)(gYTController,pv,pid);
-     MTLog(@"[HOST] presentation class=%@ super=%@",NSStringFromClass([v class]),NSStringFromClass([v superview].class));
-     if(![v isKindOfClass:UIView.class])return;
-     if(!gHostWindow){gHostWindow=[[UIWindow alloc]initWithWindowScene:scene];gHostWindow.frame=scene.coordinateSpace.bounds;gHostWindow.windowLevel=UIWindowLevelAlert+60;gHostWindow.rootViewController=[UIViewController new];gHostWindow.rootViewController.view.backgroundColor=UIColor.blackColor;}
-     gPresentation=v;[gPresentation removeFromSuperview];gPresentation.frame=gHostWindow.bounds;gPresentation.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;[gHostWindow.rootViewController.view addSubview:gPresentation];gHostWindow.hidden=NO;
-     MTLog(@"[HOST] ATTACHED frame=%@ scene=%@",NSStringFromCGRect(gPresentation.frame),scene.session.persistentIdentifier);
-   });
- }@catch(NSException*e){MTLog(@"[HOST] ERROR %@ %@",e.name,e.reason);}
+static NSSet<NSString *> *gEnabledApps;
+static BOOL gAppClient=NO, gYouTubeLayout=NO;
+static BOOL CTEnabled(id identifier){
+    if(!CTEligibleIdentifier(identifier))return NO;
+    @synchronized(NSProcessInfo.processInfo){return [gEnabledApps containsObject:identifier];}
+}
+static NSArray *CTEnabledIdentifiers(void){
+    @synchronized(NSProcessInfo.processInfo){return [[gEnabledApps allObjects] sortedArrayUsingSelector:@selector(compare:)];}
+}
+static void CTReloadConfiguration(void){
+    NSSet *apps=CTReadEnabledApps();
+    @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static void MTDumpMethods(Class c, NSString *name){
-    unsigned int count=0;Method *methods=class_copyMethodList(c,&count);
-    for(unsigned int i=0;i<count;i++){
-        SEL sel=method_getName(methods[i]);NSString *sn=NSStringFromSelector(sel);
-        if([sn localizedCaseInsensitiveContainsString:@"activ"]||
-           [sn localizedCaseInsensitiveContainsString:@"launch"]||
-           [sn localizedCaseInsensitiveContainsString:@"application"]||
-           [sn localizedCaseInsensitiveContainsString:@"scene"]||
-           [sn localizedCaseInsensitiveContainsString:@"carplay"]||
-           [sn localizedCaseInsensitiveContainsString:@"foreground"])
-            MTLog(@"[ACT-METHOD] %@ -%@ types=%s",name,sn,method_getTypeEncoding(methods[i]));
-    }
-    free(methods);
-    Class meta=object_getClass(c);count=0;methods=class_copyMethodList(meta,&count);
-    for(unsigned int i=0;i<count;i++){
-        SEL sel=method_getName(methods[i]);NSString *sn=NSStringFromSelector(sel);
-        if([sn localizedCaseInsensitiveContainsString:@"activ"]||
-           [sn localizedCaseInsensitiveContainsString:@"launch"]||
-           [sn localizedCaseInsensitiveContainsString:@"application"]||
-           [sn localizedCaseInsensitiveContainsString:@"scene"]||
-           [sn localizedCaseInsensitiveContainsString:@"carplay"]||
-           [sn localizedCaseInsensitiveContainsString:@"shared"])
-            MTLog(@"[ACT-METHOD] %@ +%@ types=%s",name,sn,method_getTypeEncoding(methods[i]));
-    }
-    free(methods);
-}
-static void MTProbeActivationServices(void){
-    NSArray *classes=@[@"SBSApplicationCarPlayService",@"SBApplicationController",@"DBApplicationInfoCache",@"DBApplicationLaunchService",@"DBProcessMonitor"];
-    NSArray *sels=@[@"sharedInstance",@"sharedService",@"service",@"defaultService",@"applicationWithBundleIdentifier:",@"applicationForBundleIdentifier:",
-                    @"requestActivationForBundleIdentifier:",@"activateApplication:",@"launchApplication:",@"openApplication:"];
-    for(NSString *cn in classes){
-        Class c=NSClassFromString(cn);if(!c){MTLog(@"[ACT-PROBE] class %@ missing",cn);continue;}
-        MTLog(@"[ACT-PROBE] class %@ present",cn); MTDumpMethods(c,cn);
-        id obj=nil;
-        for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{obj=((id(*)(id,SEL))objc_msgSend)(c,sel);MTLog(@"[ACT-PROBE] %@ +%@ -> %@",cn,ss,obj);if(obj)break;}@catch(NSException*e){MTLog(@"[ACT-PROBE] %@ +%@ error=%@",cn,ss,e.name);}}}
-        id target=obj?:c;
-        for(NSString *ss in sels){SEL sel=NSSelectorFromString(ss);if([target respondsToSelector:sel])MTLog(@"[ACT-PROBE] %@ responds %@",cn,ss);}
+static NSString *const CTBuild=@"CONNECTTA-0.4.0";
+static void CTLog(NSString *format,...){
+    va_list args;va_start(args,format);
+    NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
+    NSString *line=[NSString stringWithFormat:@"[%@ pid=%d] %@\n",CTBuild,NSProcessInfo.processInfo.processIdentifier,message];
+    BOOL app=gAppClient;
+    NSString *path=app?[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/ConnectTA-client.txt"]:([NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.CarPlayApp"]?@"/var/mobile/ConnectTA.txt":@"/var/mobile/ConnectTA-admission.txt");
+    @synchronized(NSFileManager.class){
+        NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
+        NSFileHandle *file=[NSFileHandle fileHandleForWritingAtPath:path];
+        if(!file){[data writeToFile:path atomically:YES];return;}
+        @try{if([file seekToEndOfFile]>1024*1024){[file truncateFileAtOffset:0];[file seekToFileOffset:0];}[file writeData:data];}@catch(__unused NSException *e){}
+        [file closeFile];
     }
 }
-static void MTProbeDBSceneController(void){
-    Class c=NSClassFromString(@"DBApplicationSceneViewController");
-    if(!c){MTLog(@"[DBSCENE] class missing");return;}
-    MTLog(@"[DBSCENE] class present superclass=%@",NSStringFromClass(class_getSuperclass(c)));
-    MTDumpMethods(c,@"DBApplicationSceneViewController");
-    unsigned int mc=0;Method *allm=class_copyMethodList(c,&mc);
-    MTLog(@"[DBSCENE] methodCount=%u",mc);
-    for(unsigned int i=0;i<mc;i++) MTLog(@"[DB-METHOD] -%@ types=%s",NSStringFromSelector(method_getName(allm[i])),method_getTypeEncoding(allm[i]));
-    free(allm);
-    unsigned int count=0;Ivar *ivars=class_copyIvarList(c,&count);
-    for(unsigned int i=0;i<count;i++){
-        const char *n=ivar_getName(ivars[i]);const char *t=ivar_getTypeEncoding(ivars[i]);
-        NSString *name=n?[NSString stringWithUTF8String:n]:@"";
-        if([name localizedCaseInsensitiveContainsString:@"manager"]||
-           [name localizedCaseInsensitiveContainsString:@"scene"]||
-           [name localizedCaseInsensitiveContainsString:@"service"]||
-           [name localizedCaseInsensitiveContainsString:@"application"]||
-           [name localizedCaseInsensitiveContainsString:@"process"])
-            MTLog(@"[DB-IVAR] %@ type=%s",name,t?t:"");
-    }
-    free(ivars);
-    unsigned int pc=0;objc_property_t *props=class_copyPropertyList(c,&pc);
-    for(unsigned int i=0;i<pc;i++){
-        NSString *name=[NSString stringWithUTF8String:property_getName(props[i])];
-        if([name localizedCaseInsensitiveContainsString:@"manager"]||
-           [name localizedCaseInsensitiveContainsString:@"scene"]||
-           [name localizedCaseInsensitiveContainsString:@"service"]||
-           [name localizedCaseInsensitiveContainsString:@"application"]||
-           [name localizedCaseInsensitiveContainsString:@"process"])
-            MTLog(@"[DB-PROP] %@ attrs=%s",name,property_getAttributes(props[i]));
-    }
-    free(props);
+static id CTV(id object,NSString *key){@try{return[object valueForKey:key];}@catch(__unused NSException *e){return nil;}}
+static BOOL CTIsEnabledApp(id info){
+    return CTEnabled(CTV(info,@"bundleIdentifier"));
 }
-static void MTProbeDBApplicationInfo(void){
-    Class c=NSClassFromString(@"DBApplicationInfo");
-    if(!c){MTLog(@"[APPINFO] class missing");return;}
-    MTLog(@"[APPINFO] class present superclass=%@",NSStringFromClass(class_getSuperclass(c)));
-    unsigned int mc=0;Method *m=class_copyMethodList(c,&mc);
-    for(unsigned int i=0;i<mc;i++)MTLog(@"[APPINFO-METHOD] -%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-    free(m);
-    Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
-    for(unsigned int i=0;i<mc;i++)MTLog(@"[APPINFO-METHOD] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-    free(m);
-}
-static void MTProbeFBSApplicationInfo(void){
-    Class c=NSClassFromString(@"FBSApplicationInfo");
-    if(!c){MTLog(@"[FBSAPPINFO] class missing");return;}
-    MTLog(@"[FBSAPPINFO] class present superclass=%@",NSStringFromClass(class_getSuperclass(c)));
-    unsigned int mc=0;Method *m=class_copyMethodList(c,&mc);
-    for(unsigned int i=0;i<mc;i++){
-        NSString *sn=NSStringFromSelector(method_getName(m[i]));
-        if([sn localizedCaseInsensitiveContainsString:@"bundle"]||
-           [sn localizedCaseInsensitiveContainsString:@"proxy"]||
-           [sn localizedCaseInsensitiveContainsString:@"init"]||
-           [sn localizedCaseInsensitiveContainsString:@"application"]||
-           [sn localizedCaseInsensitiveContainsString:@"identifier"])
-            MTLog(@"[FBSAPPINFO-METHOD] -%@ types=%s",sn,method_getTypeEncoding(m[i]));
-    }
-    free(m);
-    Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
-    for(unsigned int i=0;i<mc;i++){
-        NSString *sn=NSStringFromSelector(method_getName(m[i]));
-        if([sn localizedCaseInsensitiveContainsString:@"bundle"]||
-           [sn localizedCaseInsensitiveContainsString:@"proxy"]||
-           [sn localizedCaseInsensitiveContainsString:@"application"]||
-           [sn localizedCaseInsensitiveContainsString:@"identifier"])
-            MTLog(@"[FBSAPPINFO-METHOD] +%@ types=%s",sn,method_getTypeEncoding(m[i]));
-    }
-    free(m);
-}
-static void MTProbeApplicationProxy(void){
-    NSArray *names=@[@"LSApplicationProxy",@"LSApplicationWorkspace"];
-    for(NSString *cn in names){
-        Class c=NSClassFromString(cn);
-        if(!c){MTLog(@"[LSPROXY] class %@ missing",cn);continue;}
-        MTLog(@"[LSPROXY] class %@ present",cn);
-        Class meta=object_getClass(c);unsigned int mc=0;Method *m=class_copyMethodList(meta,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString *sn=NSStringFromSelector(method_getName(m[i]));
-            if([sn localizedCaseInsensitiveContainsString:@"application"]||
-               [sn localizedCaseInsensitiveContainsString:@"bundle"]||
-               [sn localizedCaseInsensitiveContainsString:@"proxy"]||
-               [sn localizedCaseInsensitiveContainsString:@"default"])
-                MTLog(@"[LSPROXY-METHOD] %@ +%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
-        }
-        free(m);
-    }
-}
-static void MTTryBuildYouTubeAppInfo(void){
-    Class lp=NSClassFromString(@"LSApplicationProxy"), di=NSClassFromString(@"DBApplicationInfo");
-    if(!lp||!di){MTLog(@"[BUILD] classes missing proxy=%@ info=%@",lp,di);return;}
-    SEL ps=NSSelectorFromString(@"applicationProxyForIdentifier:");
-    if(![lp respondsToSelector:ps]){MTLog(@"[BUILD] proxy factory missing");return;}
-    id proxy=nil,info=nil;
-    @try{
-        proxy=((id(*)(id,SEL,id))objc_msgSend)(lp,ps,@"com.google.ios.youtube");
-        MTLog(@"[BUILD] proxy=%@ class=%@",proxy,NSStringFromClass([proxy class]));
-        if(!proxy)return;
-        SEL init=NSSelectorFromString(@"initWithApplicationProxy:");
-        info=((id(*)(id,SEL,id))objc_msgSend)([di alloc],init,proxy);
-        MTLog(@"[BUILD] appInfo=%@ class=%@ valid=%@ name=%@ declaration=%@",info,NSStringFromClass([info class]),MTV(info,@"isValid"),MTV(info,@"displayName"),MTV(info,@"carPlayDeclaration"));
-        if(!info)return;
-        if([info respondsToSelector:NSSelectorFromString(@"setCBFake:")])((void(*)(id,SEL,BOOL))objc_msgSend)(info,NSSelectorFromString(@"setCBFake:"),YES);
-        if([info respondsToSelector:NSSelectorFromString(@"setCBBridged:")])((void(*)(id,SEL,BOOL))objc_msgSend)(info,NSSelectorFromString(@"setCBBridged:"),YES);
-        gYTAppInfo=info;
-        MTLog(@"[BUILD] flags CBFake=%@ CBBridged=%@",MTV(info,@"CBFake"),MTV(info,@"CBBridged"));
-        MTProbeRealYouTubeIdentity();
-        MTTryLaunchYouTubeProcess();
-        MTProbeValidClientIdentity();
-        MTBuildDirectDefinitionProbe();
-        MTTryCreateDirectYouTubeScene();
-        MTProbeDirectSceneObjects();
-        MTProbeDirectSceneInputs();
-        MTValidateYouTubeInDashboard();
-    }@catch(NSException*e){MTLog(@"[BUILD] ERROR %@ %@",e.name,e.reason);}
-}
-static void MTProbeControllerEnvironment(id controller, NSString *sid){
-    if(!controller)return;
-    id env=MTV(controller,@"environment"); if(env && [NSStringFromClass([env class]) isEqualToString:@"DBDashboard"]) { gDashboardEnv=env; gMTHybridDashboard=env; MTLog(@"[HYBRID-DASH] captured live dashboard=%@",env); }
-    id realScene=MTV(controller,@"scene");
-    id realSettings=MTV(realScene,@"settings");
-    id dc=MTV(realSettings,@"displayConfiguration");
-    if(dc) {
-        gCarDisplayConfig=dc;
-        MTLog(@"[DIRECTGO] captured CarPlay display=%@",dc);
-        if(gDirectYTScene && !MTV(gDirectYTScene,@"clientProcess")){
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.25*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-                MTLog(@"[DIRECTGO] retry after display capture");
-                MTTryActivateDirectYouTubeScene(gDirectYTScene);
-            });
-        }
-    }
-
-    id req=MTV(controller,@"requester");
-    MTLog(@"[ENV] sid=%@ controller=%@ environment=%@ envClass=%@ requester=%@ requesterClass=%@",
-          sid,NSStringFromClass([controller class]),env,NSStringFromClass([env class]),req,NSStringFromClass([req class]));
-    if(env)MTDumpMethods([env class],[NSString stringWithFormat:@"ENV:%@",NSStringFromClass([env class])]);
-    MTValidateYouTubeInDashboard();
-}
-static void MTValidateYouTubeInDashboard(void){
-    if(!gYTAppInfo||!gDashboardEnv){MTLog(@"[DASH] waiting appInfo=%d env=%d",gYTAppInfo!=nil,gDashboardEnv!=nil);return;}
-    @try{
-        SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
-        SEL sid=NSSelectorFromString(@"sceneIdentifierForAppInfo:");
-        SEL frm=NSSelectorFromString(@"sceneFrameForAppInfo:");
-        SEL scene=NSSelectorFromString(@"sceneForAppInfo:");
-        if([gDashboardEnv respondsToSelector:pre]) MTLog(@"[DASH] preflightRequired=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,pre,gYTAppInfo));
-        if([gDashboardEnv respondsToSelector:sid]) MTLog(@"[DASH] sceneIdentifier=%@",((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,sid,gYTAppInfo));
-        if([gDashboardEnv respondsToSelector:frm]){CGRect r=((CGRect(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,frm,gYTAppInfo);MTLog(@"[DASH] sceneFrame=%@",NSStringFromCGRect(r));}
-        if([gDashboardEnv respondsToSelector:scene]) MTLog(@"[DASH] existingScene=%@",((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,scene,gYTAppInfo));
-        MTTryDashboardLaunchYouTube();
-    }@catch(NSException*e){MTLog(@"[DASH] ERROR %@ %@",e.name,e.reason);}
-}
-static BOOL gDidLaunchYT=NO;
-static void MTTryDashboardLaunchYouTube(void){
-    if(gDidLaunchYT||!gYTAppInfo||!gDashboardEnv)return;
-    SEL launch=NSSelectorFromString(@"_launchAppWithInfo:forURL:");
-    if(![gDashboardEnv respondsToSelector:launch]){MTLog(@"[LAUNCH] selector missing");return;}
-    gDidLaunchYT=YES;
-    @try{
-        MTLog(@"[LAUNCH] preparing Dashboard launch appInfo=%@ sceneID=%@",gYTAppInfo,
-              ((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,NSSelectorFromString(@"sceneIdentifierForAppInfo:"),gYTAppInfo));
-        Class li=NSClassFromString(@"DBApplicationLaunchInfo");
-        SEL initLI=NSSelectorFromString(@"initWithApplication:activationSettings:");
-        if(!li || ![li instancesRespondToSelector:initLI]) { MTLog(@"[LAUNCH] launchInfo class/init missing"); gDidLaunchYT=NO; return; }
-        NSDictionary *activation=@{@"DBActivationSettingLaunchSource":@"MiniTa"};
-        id launchInfo=((id(*)(id,SEL,id,id))objc_msgSend)([li alloc],initLI,gYTAppInfo,activation);
-        MTLog(@"[LAUNCH] launchInfo=%@ application=%@ settings=%@",launchInfo,MTV(launchInfo,@"application"),MTV(launchInfo,@"activationSettings"));
-        ((void(*)(id,SEL,id,id))objc_msgSend)(gDashboardEnv,launch,launchInfo,nil);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-            id scene=nil;
-            @try{scene=((id(*)(id,SEL,id))objc_msgSend)(gDashboardEnv,NSSelectorFromString(@"sceneForAppInfo:"),gYTAppInfo);}@catch(__unused NSException*e){}
-            MTLog(@"[LAUNCH] after scene=%@",scene);
-        });
-    }@catch(NSException*e){MTLog(@"[LAUNCH] ERROR %@ %@",e.name,e.reason);gDidLaunchYT=NO;}
-}
-static void MTProbeLaunchInfoClass(void){
-    NSArray *names=@[@"DBApplicationLaunchInfo",@"DBApplicationLaunchInformation",@"DBLaunchInfo",@"DBOpenApplicationEvent"];
-    for(NSString *cn in names){
-        Class c=NSClassFromString(cn);if(!c){MTLog(@"[LAUNCHINFO] %@ missing",cn);continue;}
-        MTLog(@"[LAUNCHINFO] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
-        unsigned int mc=0;Method *m=class_copyMethodList(c,&mc);
-        for(unsigned int i=0;i<mc;i++)MTLog(@"[LAUNCHINFO-METHOD] %@ -%@ types=%s",cn,NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-        free(m);
-    }
-}
-static void __attribute__((used)) MTDumpSceneInternals(id controller){
-    if(!controller)return;
-    id scene=MTV(controller,@"scene");
-    id update=MTV(controller,@"currentSceneUpdate");
-    id presenters=MTV(controller,@"scenePresentersByIdentifier");
-    MTLog(@"[SCENE] scene=%@ class=%@ update=%@ updateClass=%@ presenters=%@",scene,NSStringFromClass([scene class]),update,NSStringFromClass([update class]),presenters);
-    if(scene){
-        for(NSString *k in @[@"identifier",@"clientProcess",@"clientIdentity",@"settings",@"clientSettings",@"specification",@"definition",@"hostProcess",@"workspaceIdentifier"]){
-            MTLog(@"[SCENE] %@=%@",k,MTV(scene,k));
-        }
-    }
-    if(update){
-        unsigned int mc=0;Method *m=class_copyMethodList([update class],&mc);
-        for(unsigned int i=0;i<mc;i++) MTLog(@"[UPDATE-METHOD] -%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-        free(m);
-        MTLog(@"[UPDATE] %@",update);
-    }
-}
-static void MTProbeSceneSpecificationClasses(void){
-    NSArray *names=@[@"CRSUIProxyApplicationSceneSpecification",@"FBSSceneDefinition",@"FBSSceneIdentity",@"FBSceneManager"];
-    for(NSString *cn in names){
-        Class c=NSClassFromString(cn); if(!c){MTLog(@"[SPEC] %@ missing",cn);continue;}
-        MTLog(@"[SPEC] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
-        unsigned int mc=0; Method *m=class_copyMethodList(c,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString *sn=NSStringFromSelector(method_getName(m[i]));
-            if([sn localizedCaseInsensitiveContainsString:@"init"]||
-               [sn localizedCaseInsensitiveContainsString:@"identity"]||
-               [sn localizedCaseInsensitiveContainsString:@"client"]||
-               [sn localizedCaseInsensitiveContainsString:@"application"]||
-               [sn localizedCaseInsensitiveContainsString:@"scene"]||
-               [sn localizedCaseInsensitiveContainsString:@"specification"])
-                MTLog(@"[SPEC-METHOD] %@ -%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
-        } free(m);
-        Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString *sn=NSStringFromSelector(method_getName(m[i]));
-            if([sn localizedCaseInsensitiveContainsString:@"identity"]||
-               [sn localizedCaseInsensitiveContainsString:@"application"]||
-               [sn localizedCaseInsensitiveContainsString:@"scene"]||
-               [sn localizedCaseInsensitiveContainsString:@"specification"])
-                MTLog(@"[SPEC-METHOD] %@ +%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
-        } free(m);
-    }
-}
-static void MTProbeIdentityAndSpecFactories(void){
-    NSArray *names=@[@"FBSApplicationIdentity",@"FBSProcessIdentity",@"UIApplicationSceneSpecification",@"UIApplicationStarkSceneSpecification",@"UIApplicationSceneSettings",@"UIApplicationSceneClientSettings"];
-    for(NSString *cn in names){
-        Class c=NSClassFromString(cn);if(!c){MTLog(@"[DIRECT] %@ missing",cn);continue;}
-        MTLog(@"[DIRECT] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
-        for(id target in @[c,object_getClass(c)]){
-            BOOL meta=(target==object_getClass(c));unsigned int mc=0;Method *m=class_copyMethodList(target,&mc);
-            for(unsigned int i=0;i<mc;i++){
-                NSString *sn=NSStringFromSelector(method_getName(m[i]));
-                if([sn localizedCaseInsensitiveContainsString:@"identity"]||
-                   [sn localizedCaseInsensitiveContainsString:@"bundle"]||
-                   [sn localizedCaseInsensitiveContainsString:@"application"]||
-                   [sn localizedCaseInsensitiveContainsString:@"specification"]||
-                   [sn localizedCaseInsensitiveContainsString:@"settings"]||
-                   [sn localizedCaseInsensitiveContainsString:@"init"])
-                    MTLog(@"[DIRECT-METHOD] %@ %c%@ types=%s",cn,meta?'+':'-',sn,method_getTypeEncoding(m[i]));
-            } free(m);
-        }
-    }
-    if(gYTAppInfo) MTLog(@"[DIRECT] yt applicationIdentity=%@ processIdentity=%@",MTV(gYTAppInfo,@"applicationIdentity"),MTV(gYTAppInfo,@"processIdentity"));
-}
-static void MTProbeRealYouTubeIdentity(void){
-    if(!gYTAppInfo){MTLog(@"[YTIDENT] appInfo missing");return;}
-    for(NSString *key in @[@"applicationIdentity",@"processIdentity"]){
-        id ident=MTV(gYTAppInfo,key);
-        MTLog(@"[YTIDENT] %@=%@ class=%@",key,ident,NSStringFromClass([ident class]));
-        if(!ident)continue;
-        Class c=[ident class];
-        unsigned int mc=0;Method *m=class_copyMethodList(c,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString *sn=NSStringFromSelector(method_getName(m[i]));
-            if([sn localizedCaseInsensitiveContainsString:@"identity"]||
-               [sn localizedCaseInsensitiveContainsString:@"identifier"]||
-               [sn localizedCaseInsensitiveContainsString:@"bundle"]||
-               [sn localizedCaseInsensitiveContainsString:@"application"]||
-               [sn localizedCaseInsensitiveContainsString:@"process"]||
-               [sn localizedCaseInsensitiveContainsString:@"init"])
-                MTLog(@"[YTIDENT-METHOD] %@ -%@ types=%s",NSStringFromClass(c),sn,method_getTypeEncoding(m[i]));
-        }
-        free(m);
-        Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString *sn=NSStringFromSelector(method_getName(m[i]));
-            if([sn localizedCaseInsensitiveContainsString:@"identity"]||
-               [sn localizedCaseInsensitiveContainsString:@"identifier"]||
-               [sn localizedCaseInsensitiveContainsString:@"bundle"]||
-               [sn localizedCaseInsensitiveContainsString:@"application"]||
-               [sn localizedCaseInsensitiveContainsString:@"process"])
-                MTLog(@"[YTIDENT-METHOD] %@ +%@ types=%s",NSStringFromClass(c),sn,method_getTypeEncoding(m[i]));
-        }
-        free(m);
-    }
-}
-static void MTProbeDirectSceneInputs(void){
-    if(!gYTAppInfo){MTLog(@"[DIRECT2] appInfo missing");return;}
-    id pid=MTV(gYTAppInfo,@"processIdentity");
-    MTLog(@"[DIRECT2] processIdentity=%@ class=%@",pid,NSStringFromClass([pid class]));
-    Class def=NSClassFromString(@"FBSSceneDefinition");
-    Class spec=NSClassFromString(@"UIApplicationStarkSceneSpecification");
-    if(def){
-        unsigned int mc=0;Method *m=class_copyMethodList(def,&mc);
-        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] -%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-        free(m);
-        Class meta=object_getClass(def);mc=0;m=class_copyMethodList(meta,&mc);
-        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-        free(m);
-    }
-    if(spec){
-        Class meta=object_getClass(spec);unsigned int mc=0;Method *m=class_copyMethodList(meta,&mc);
-        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-SPEC] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-        free(m);
-    }
-    Class mgr=NSClassFromString(@"FBSceneManager");
-    if(mgr){
-        Class meta=object_getClass(mgr);unsigned int mc=0;Method *m=class_copyMethodList(meta,&mc);
-        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-MGR] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-        free(m);
-    }
-}
-static void MTProbeDirectSceneObjects(void){
-    if(!gYTAppInfo)return;
-    id proc=MTV(gYTAppInfo,@"processIdentity");
-    Class def=NSClassFromString(@"FBSSceneDefinition");
-    Class ident=NSClassFromString(@"FBSSceneIdentity");
-    Class spec=NSClassFromString(@"UIApplicationSceneSpecification");
-    MTLog(@"[DIRECT2] processIdentity=%@ def=%@ ident=%@ spec=%@",proc,def,ident,spec);
-    if(spec){
-        id o=nil;
-        @try{o=[spec new];} @catch(NSException *e){MTLog(@"[DIRECT2] spec new ERROR %@ %@",e.name,e.reason);}
-        MTLog(@"[DIRECT2] specObject=%@ settingsClass=%@ clientSettingsClass=%@",o,
-              o?((id(*)(id,SEL))objc_msgSend)(o,NSSelectorFromString(@"settingsClass")):nil,
-              o?((id(*)(id,SEL))objc_msgSend)(o,NSSelectorFromString(@"clientSettingsClass")):nil);
-    }
-    if(def){
-        unsigned int mc=0;Method *m=class_copyMethodList(def,&mc);
-        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] -%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-        free(m);
-        Class meta=object_getClass(def);mc=0;m=class_copyMethodList(meta,&mc);
-        for(unsigned int i=0;i<mc;i++) MTLog(@"[DIRECT2-DEF] +%@ types=%s",NSStringFromSelector(method_getName(m[i])),method_getTypeEncoding(m[i]));
-        free(m);
-    }
-}
-static void MTBuildDirectDefinitionProbe(void){
-    if(!gYTAppInfo){MTLog(@"[DIRECTDEF] appInfo missing");return;}
-    id proc=MTV(gYTAppInfo,@"processIdentity");
-    Class dc=NSClassFromString(@"FBSSceneDefinition");
-    Class ic=NSClassFromString(@"FBSSceneIdentity");
-    Class sc=NSClassFromString(@"UIApplicationStarkSceneSpecification");
-    if(!proc||!dc||!ic||!sc){MTLog(@"[DIRECTDEF] missing proc=%@ def=%@ ident=%@ spec=%@",proc,dc,ic,sc);return;}
-    @try{
-        id def=((id(*)(id,SEL))objc_msgSend)(dc,NSSelectorFromString(@"definition"));
-        NSString *sid=@"MiniTa.Direct.com.google.ios.youtube";
-        id ident=((id(*)(id,SEL,id,id))objc_msgSend)(ic,NSSelectorFromString(@"identityForIdentifier:workspaceIdentifier:"),sid,@"kDBAppWorkspaceIdentifier");
-        id spec=[[sc alloc] init];
-        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setIdentity:"),ident);
-        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setClientIdentity:"),proc);
-        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setSpecification:"),spec);
-        MTLog(@"[DIRECTDEF] def=%@ valid=%@ identity=%@ client=%@ spec=%@ settingsClass=%@ clientSettingsClass=%@",
-              def,MTV(def,@"isValid"),MTV(def,@"identity"),MTV(def,@"clientIdentity"),MTV(def,@"specification"),
-              MTV(spec,@"settingsClass"),MTV(spec,@"clientSettingsClass"));
-    }@catch(NSException *e){MTLog(@"[DIRECTDEF] ERROR %@ %@",e.name,e.reason);}
-}
-static BOOL gDidCreateDirectYT=NO;
-static void MTTryCreateDirectYouTubeScene(void){
-    if(gDidCreateDirectYT||!gYTAppInfo)return;
-    id proc=MTV(gYTAppInfo,@"processIdentity");
-    id client=nil;
-    SEL cidSel=NSSelectorFromString(@"fbs_sceneClientIdentity");
-    if(proc && [proc respondsToSelector:cidSel]) client=((id(*)(id,SEL))objc_msgSend)(proc,cidSel);
-    Class dc=NSClassFromString(@"FBSSceneDefinition"),ic=NSClassFromString(@"FBSSceneIdentity");
-    Class sc=NSClassFromString(@"UIApplicationStarkSceneSpecification"),mc=NSClassFromString(@"FBSceneManager");
-    if(!client||!dc||!ic||!sc||!mc){MTLog(@"[DIRECTCREATE] prerequisites missing client=%@",client);return;}
-    @try{
-        id def=((id(*)(id,SEL))objc_msgSend)(dc,NSSelectorFromString(@"definition"));
-        NSString *sid=@"MiniTa.Direct.com.google.ios.youtube";
-        id ident=((id(*)(id,SEL,id,id))objc_msgSend)(ic,NSSelectorFromString(@"identityForIdentifier:workspaceIdentifier:"),sid,@"kDBAppWorkspaceIdentifier");
-        id spec=[[sc alloc] init];
-        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setIdentity:"),ident);
-        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setClientIdentity:"),client);
-        ((void(*)(id,SEL,id))objc_msgSend)(def,NSSelectorFromString(@"setSpecification:"),spec);
-        MTLog(@"[DIRECTCREATE] process=%@ sceneClientIdentity=%@ class=%@ isValidSel=%d",proc,client,NSStringFromClass([client class]),[client respondsToSelector:NSSelectorFromString(@"isValid")]);
-        BOOL valid=((BOOL(*)(id,SEL))objc_msgSend)(def,NSSelectorFromString(@"isValid"));
-        MTLog(@"[DIRECTCREATE] definition valid=%d def=%@",valid,def);
-        if(!valid)return;
-        id mgr=((id(*)(id,SEL))objc_msgSend)(mc,NSSelectorFromString(@"sharedInstance"));
-        gDidCreateDirectYT=YES;
-        id scene=((id(*)(id,SEL,id))objc_msgSend)(mgr,NSSelectorFromString(@"createSceneWithDefinition:"),def);
-        gDirectYTScene=scene;
-        MTLog(@"[DIRECTCREATE] returned scene=%@ class=%@",scene,NSStringFromClass([scene class]));
-        MTProbeDirectSceneActivation(scene);
-        MTTryActivateDirectYouTubeScene(scene);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-            id again=((id(*)(id,SEL,id))objc_msgSend)(mgr,NSSelectorFromString(@"sceneWithIdentifier:"),sid);
-            MTLog(@"[DIRECTCREATE] after scene=%@ clientProcess=%@ definition=%@",again,MTV(again,@"clientProcess"),MTV(again,@"definition"));
-        });
-    }@catch(NSException *e){MTLog(@"[DIRECTCREATE] ERROR %@ %@",e.name,e.reason);gDidCreateDirectYT=NO;}
-}
-static void MTProbeValidClientIdentity(void){
-    if(!gYTAppInfo)return;
-    id proc=MTV(gYTAppInfo,@"processIdentity");
-    id app=MTV(gYTAppInfo,@"applicationIdentity");
-    NSArray *objs=@[proc?:[NSNull null],app?:[NSNull null]];
-    for(id o in objs){
-        if(o==(id)[NSNull null])continue;
-        Class c=[o class];
-        MTLog(@"[CID] object=%@ class=%@",o,NSStringFromClass(c));
-        for(Class k=c;k;k=class_getSuperclass(k)){
-            MTLog(@"[CID] chain=%@ isValid=%d",NSStringFromClass(k),[k instancesRespondToSelector:NSSelectorFromString(@"isValid")]);
-        }
-    }
-    NSArray *names=@[@"FBProcessIdentity",@"FBApplicationProcessIdentity",@"FBSProcessIdentity",@"FBSApplicationIdentity",@"BSProcessIdentity",@"RBSProcessIdentity"];
-    for(NSString *cn in names){
-        Class c=NSClassFromString(cn);
-        MTLog(@"[CIDCLASS] %@=%@ isValid=%d",cn,c,[c instancesRespondToSelector:NSSelectorFromString(@"isValid")]);
-        if(!c)continue;
-        unsigned int mc=0;Method*m=class_copyMethodList(c,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString*sn=NSStringFromSelector(method_getName(m[i]));
-            if([sn localizedCaseInsensitiveContainsString:@"init"]||[sn localizedCaseInsensitiveContainsString:@"identity"]||[sn localizedCaseInsensitiveContainsString:@"process"]||[sn localizedCaseInsensitiveContainsString:@"application"])
-                MTLog(@"[CIDMETHOD] %@ -%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
-        }free(m);
-        Class meta=object_getClass(c);mc=0;m=class_copyMethodList(meta,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString*sn=NSStringFromSelector(method_getName(m[i]));
-            if([sn localizedCaseInsensitiveContainsString:@"identity"]||[sn localizedCaseInsensitiveContainsString:@"process"]||[sn localizedCaseInsensitiveContainsString:@"application"])
-                MTLog(@"[CIDMETHOD] %@ +%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
-        }free(m);
-    }
-}
-static void MTProbeDirectSceneActivation(id scene){
-    if(!scene)return;
-    MTLog(@"[DIRECTACT] scene=%@ clientProcess=%@ settings=%@ clientSettings=%@",scene,MTV(scene,@"clientProcess"),MTV(scene,@"settings"),MTV(scene,@"clientSettings"));
-    NSArray *classes=@[@"FBScene",@"FBSSceneParameters",@"FBSSceneParametersMutable",@"FBSSceneSettings",@"UICarPlayApplicationSceneSettings",@"UIApplicationSceneClientSettings"];
-    for(NSString *cn in classes){
-        Class c=NSClassFromString(cn);if(!c){MTLog(@"[DIRECTACT] class %@ missing",cn);continue;}
-        unsigned int mc=0;Method*m=class_copyMethodList(c,&mc);
-        for(unsigned int i=0;i<mc;i++){
-            NSString*sn=NSStringFromSelector(method_getName(m[i]));
-            if([sn localizedCaseInsensitiveContainsString:@"update"]||
-               [sn localizedCaseInsensitiveContainsString:@"activate"]||
-               [sn localizedCaseInsensitiveContainsString:@"foreground"]||
-               [sn localizedCaseInsensitiveContainsString:@"settings"]||
-               [sn localizedCaseInsensitiveContainsString:@"display"]||
-               [sn localizedCaseInsensitiveContainsString:@"frame"]||
-               [sn localizedCaseInsensitiveContainsString:@"parameter"]||
-               [sn localizedCaseInsensitiveContainsString:@"init"])
-                MTLog(@"[DIRECTACT-METHOD] %@ -%@ types=%s",cn,sn,method_getTypeEncoding(m[i]));
-        }free(m);
-    }
-}
-static void MTTryActivateDirectYouTubeScene(id scene){
-    if(!scene)return;
-    @try{
-        id settings=MTV(scene,@"settings");
-        MTLog(@"[DIRECTGO] before process=%@ display=%@ frame=%@ foreground=%@",
-              MTV(scene,@"clientProcess"),MTV(settings,@"displayConfiguration"),
-              NSStringFromCGRect(((CGRect(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"frame"))),
-              @(((BOOL(*)(id,SEL))objc_msgSend)(settings,NSSelectorFromString(@"isForeground"))));
-        if(!gCarDisplayConfig){MTLog(@"[DIRECTGO] waiting for CarPlay displayConfiguration");return;}
-
-        ((void(*)(id,SEL,id))objc_msgSend)(scene,NSSelectorFromString(@"updateSettingsWithBlock:"),^(id mutableSettings){
-            @try{
-                SEL sd=NSSelectorFromString(@"setDisplayConfiguration:");
-                SEL sf=NSSelectorFromString(@"setFrame:");
-                SEL sfg=NSSelectorFromString(@"setForeground:");
-                if([mutableSettings respondsToSelector:sd]) ((void(*)(id,SEL,id))objc_msgSend)(mutableSettings,sd,gCarDisplayConfig);
-                if([mutableSettings respondsToSelector:sf]) ((void(*)(id,SEL,CGRect))objc_msgSend)(mutableSettings,sf,CGRectMake(0,0,426.66666666666663,240));
-                if([mutableSettings respondsToSelector:sfg]) ((void(*)(id,SEL,BOOL))objc_msgSend)(mutableSettings,sfg,YES);
-                MTLog(@"[DIRECTGO] mutation class=%@ display=%@ frame=%@",NSStringFromClass([mutableSettings class]),MTV(mutableSettings,@"displayConfiguration"),
-                      NSStringFromCGRect(((CGRect(*)(id,SEL))objc_msgSend)(mutableSettings,NSSelectorFromString(@"frame"))));
-            }@catch(NSException *e){MTLog(@"[DIRECTGO] mutation ERROR %@ %@",e.name,e.reason);}
-        });
-
-        SEL act=NSSelectorFromString(@"pb_activate:withCompletion:");
-        if(NO && [scene respondsToSelector:act]){
-            MTLog(@"[DIRECTGO] pb_activate");
-            void (^cfg)(id)=^(id mutableSettings){
-                @try{
-                    SEL sd=NSSelectorFromString(@"setDisplayConfiguration:");
-                    SEL sf=NSSelectorFromString(@"setFrame:");
-                    SEL sfg=NSSelectorFromString(@"setForeground:");
-                    if([mutableSettings respondsToSelector:sd]) ((void(*)(id,SEL,id))objc_msgSend)(mutableSettings,sd,gCarDisplayConfig);
-                    if([mutableSettings respondsToSelector:sf]) ((void(*)(id,SEL,CGRect))objc_msgSend)(mutableSettings,sf,CGRectMake(0,0,426.66666666666663,240));
-                    if([mutableSettings respondsToSelector:sfg]) ((void(*)(id,SEL,BOOL))objc_msgSend)(mutableSettings,sfg,YES);
-                }@catch(NSException *e){MTLog(@"[DIRECTGO] activate mutation ERROR %@ %@",e.name,e.reason);}
-            };
-            void (^done)(id)=^(id result){MTLog(@"[DIRECTGO] completion result=%@ process=%@ settings=%@",result,MTV(scene,@"clientProcess"),MTV(scene,@"settings"));};
-            ((void(*)(id,SEL,id,id))objc_msgSend)(scene,act,cfg,done);
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-                id cp=MTV(scene,@"clientProcess");
-                MTLog(@"[DIRECTGO] watchdog process=%@ settings=%@",cp,MTV(scene,@"settings"));
-                if(!cp){
-                    SEL ac2=NSSelectorFromString(@"activateWithTransitionContext:completion:");
-                    if([scene respondsToSelector:ac2]){
-                        MTLog(@"[DIRECTGO] watchdog fallback activateWithTransitionContext");
-                        ((void(*)(id,SEL,id,id))objc_msgSend)(scene,ac2,nil,^(id result){
-                            MTLog(@"[DIRECTGO] watchdog fallback completion=%@ process=%@ settings=%@",result,MTV(scene,@"clientProcess"),MTV(scene,@"settings"));
-                        });
-                    }
-                }
-            });
-        }else{
-            MTLog(@"[DIRECTGO] pb_activate selector missing");
-        }
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-            MTLog(@"[DIRECTGO] after process=%@ settings=%@ clientSettings=%@",MTV(scene,@"clientProcess"),MTV(scene,@"settings"),MTV(scene,@"clientSettings"));
-            if(!MTV(scene,@"clientProcess")){
-                SEL ac=NSSelectorFromString(@"activateWithTransitionContext:completion:");
-                if([scene respondsToSelector:ac]){
-                    MTLog(@"[DIRECTGO] fallback activateWithTransitionContext");
-                    ((void(*)(id,SEL,id,id))objc_msgSend)(scene,ac,nil,^(id result){
-                        MTLog(@"[DIRECTGO] fallback completion=%@ process=%@ settings=%@",result,MTV(scene,@"clientProcess"),MTV(scene,@"settings"));
-                    });
-                }
-            }
-        });
-    }@catch(NSException *e){MTLog(@"[DIRECTGO] ERROR %@ %@",e.name,e.reason);}
-}
-static void MTProbeClientProviderPath(void){
-    NSArray *names=@[@"FBSceneClientProvider",@"FBApplicationSceneClientProvider",@"FBProcessManager",@"FBApplicationProcess",@"FBApplicationProcessLaunchTransaction",@"FBProcess"];
-    for(NSString *cn in names){
-        Class c=NSClassFromString(cn);if(!c){MTLog(@"[PROVIDER] %@ missing",cn);continue;}
-        MTLog(@"[PROVIDER] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
-        for(id target in @[c,object_getClass(c)]){
-            BOOL meta=(target==object_getClass(c));unsigned int mc=0;Method*m=class_copyMethodList(target,&mc);
-            for(unsigned int i=0;i<mc;i++){
-                NSString *sn=NSStringFromSelector(method_getName(m[i]));
-                if([sn localizedCaseInsensitiveContainsString:@"client"]||
-                   [sn localizedCaseInsensitiveContainsString:@"process"]||
-                   [sn localizedCaseInsensitiveContainsString:@"launch"]||
-                   [sn localizedCaseInsensitiveContainsString:@"provider"]||
-                   [sn localizedCaseInsensitiveContainsString:@"application"]||
-                   [sn localizedCaseInsensitiveContainsString:@"identity"]||
-                   [sn localizedCaseInsensitiveContainsString:@"init"])
-                    MTLog(@"[PROVIDER-METHOD] %@ %c%@ types=%s",cn,meta?'+':'-',sn,method_getTypeEncoding(m[i]));
-            }free(m);
-        }
-    }
-}
-static void MTProbeProcessLaunchContext(void){
-    NSArray *names=@[@"FBProcessExecutionContext",@"FBApplicationProcessExecutionContext",@"RBSLaunchContext",@"RBSProcessIdentity",@"FBApplicationProcessLaunchTransaction"];
-    for(NSString *cn in names){
-        Class c=NSClassFromString(cn);if(!c){MTLog(@"[EXECCTX] %@ missing",cn);continue;}
-        MTLog(@"[EXECCTX] %@ present superclass=%@",cn,NSStringFromClass(class_getSuperclass(c)));
-        for(id target in @[c,object_getClass(c)]){
-            BOOL meta=(target==object_getClass(c));unsigned int mc=0;Method*m=class_copyMethodList(target,&mc);
-            for(unsigned int i=0;i<mc;i++){
-                NSString*sn=NSStringFromSelector(method_getName(m[i]));
-                if([sn localizedCaseInsensitiveContainsString:@"init"]||
-                   [sn localizedCaseInsensitiveContainsString:@"context"]||
-                   [sn localizedCaseInsensitiveContainsString:@"identity"]||
-                   [sn localizedCaseInsensitiveContainsString:@"bundle"]||
-                   [sn localizedCaseInsensitiveContainsString:@"launch"]||
-                   [sn localizedCaseInsensitiveContainsString:@"application"])
-                    MTLog(@"[EXECCTX-METHOD] %@ %c%@ types=%s",cn,meta?'+':'-',sn,method_getTypeEncoding(m[i]));
-            }free(m);
-        }
-    }
-}
-static id gYTLaunchTransaction=nil;
-static void MTTryLaunchYouTubeProcess(void){
-    if(!gYTAppInfo)return;
-    id procIdent=MTV(gYTAppInfo,@"processIdentity");
-    Class txc=NSClassFromString(@"FBApplicationProcessLaunchTransaction");
-    Class ecc=NSClassFromString(@"FBProcessExecutionContext");
-    if(!procIdent||!txc||!ecc){MTLog(@"[PROCSTART] prerequisites missing");return;}
-    @try{
-        id ec=((id(*)(id,SEL,id))objc_msgSend)([ecc alloc],NSSelectorFromString(@"initWithIdentity:"),procIdent);
-        MTLog(@"[PROCSTART] executionContext=%@ identity=%@ launchIntent=%@",ec,MTV(ec,@"identity"),MTV(ec,@"launchIntent"));
-        id (^provider)(void)=^id{ MTLog(@"[PROCSTART] executionContextProvider called"); return ec; };
-        id tx=((id(*)(id,SEL,id,id))objc_msgSend)([txc alloc],NSSelectorFromString(@"initWithProcessIdentity:executionContextProvider:"),procIdent,provider);
-        gYTLaunchTransaction=tx;
-        MTLog(@"[PROCSTART] transaction=%@ class=%@",tx,NSStringFromClass([tx class]));
-        SEL begin=NSSelectorFromString(@"begin");
-        if([tx respondsToSelector:begin]){
-            MTLog(@"[PROCSTART] begin");
-            ((void(*)(id,SEL))objc_msgSend)(tx,begin);
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-                MTLog(@"[PROCSTART] after failed=%@ process=%@ finished=%@",MTV(tx,@"failedLaunch"),MTV(tx,@"process"),MTV(MTV(tx,@"process"),@"finishedLaunching"));
-            });
-        }else MTLog(@"[PROCSTART] begin selector missing");
-    }@catch(NSException *e){MTLog(@"[PROCSTART] ERROR %@ %@",e.name,e.reason);}
-}
-static void __attribute__((unused)) MTTryKnownCarPlayActivation(void){
-    MTProbeActivationServices();
-    MTProbeDBSceneController();
-    MTProbeDBApplicationInfo();
-    MTProbeFBSApplicationInfo();
-    MTProbeApplicationProxy();
-    MTProbeLaunchInfoClass();
-    MTProbeSceneSpecificationClasses();
-    MTProbeClientProviderPath();
-    MTProbeProcessLaunchContext();
-    MTProbeIdentityAndSpecFactories();
-    MTTryBuildYouTubeAppInfo();
-    Class c=NSClassFromString(@"SBSApplicationCarPlayService");if(!c)return;
-    id svc=nil;for(NSString *ss in @[@"sharedInstance",@"sharedService",@"service",@"defaultService"]){SEL sel=NSSelectorFromString(ss);if([c respondsToSelector:sel]){@try{svc=((id(*)(id,SEL))objc_msgSend)(c,sel);if(svc)break;}@catch(__unused NSException*e){}}}
-    if(!svc)return;
-    NSString *bundle=@"com.google.ios.youtube";
-    for(NSString *ss in @[@"requestActivationForBundleIdentifier:",@"activateApplication:",@"launchApplication:",@"openApplication:"]){
-        SEL sel=NSSelectorFromString(ss);if(![svc respondsToSelector:sel])continue;
-        @try{MTLog(@"[ACT] trying %@ %@",ss,bundle);((void(*)(id,SEL,id))objc_msgSend)(svc,sel,bundle);return;}
-        @catch(NSException*e){MTLog(@"[ACT] %@ error %@ %@",ss,e.name,e.reason);}
-    }
-}
-
-static void __attribute__((unused)) MTHybridRequestYouTubeLaunch(void){
-    MTLog(@"[HYBRID-LAUNCH] AUTO-LAUNCH DISABLED"); return;
-    Class proxy=NSClassFromString(@"LSApplicationProxy");
-    Class info=NSClassFromString(@"DBApplicationInfo");
-    if(!proxy||!info){MTLog(@"[HYBRID-LAUNCH] classes missing proxy=%@ info=%@",proxy,info);return;}
-    @try{
-        id p=((id(*)(id,SEL,id))objc_msgSend)(proxy,NSSelectorFromString(@"applicationProxyForIdentifier:"),@"com.google.ios.youtube");
-        id ai=((id(*)(id,SEL,id))objc_msgSend)([info alloc],NSSelectorFromString(@"initWithApplicationProxy:"),p);
-        if([ai respondsToSelector:NSSelectorFromString(@"setCBFake:")])((void(*)(id,SEL,BOOL))objc_msgSend)(ai,NSSelectorFromString(@"setCBFake:"),YES);
-        if([ai respondsToSelector:NSSelectorFromString(@"setCBBridged:")])((void(*)(id,SEL,BOOL))objc_msgSend)(ai,NSSelectorFromString(@"setCBBridged:"),YES);
-        MTLog(@"[HYBRID-LAUNCH] appInfo=%@ valid=%@ declaration=%@",ai,MTV(ai,@"isValid"),MTV(ai,@"carPlayDeclaration"));
-        Class app=NSClassFromString(@"UIApplication"); id shared=((id(*)(id,SEL))objc_msgSend)(app,@selector(sharedApplication));
-        id dash=MTV(shared,@"_currentDashboard");
-        if(!dash){MTLog(@"[HYBRID-LAUNCH] dashboard missing");return;}
-        SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
-        if([dash respondsToSelector:pre])MTLog(@"[HYBRID-LAUNCH] preflight=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(dash,pre,ai));
-        SEL launch=NSSelectorFromString(@"_launchAppWithInfo:forURL:");
-        if([dash respondsToSelector:launch]){
-            MTLog(@"[HYBRID-LAUNCH] invoking dashboard launch");
-            ((void(*)(id,SEL,id,id))objc_msgSend)(dash,launch,ai,nil);
-        }else MTLog(@"[HYBRID-LAUNCH] dashboard launch selector missing");
-    }@catch(NSException *e){MTLog(@"[HYBRID-LAUNCH] ERROR %@ %@",e.name,e.reason);}
-}
-static __weak id gMTHybridWorkspace=nil;
-static IMP mtOrigWorkspaceInit=nil;
-static id MTHybridWorkspaceInit(id self,SEL _cmd,id owner){
-    id result=((id(*)(id,SEL,id))mtOrigWorkspaceInit)(self,_cmd,owner);
-    NSString *oc=owner?NSStringFromClass([owner class]):@"";
-    if([oc isEqualToString:@"DBDashboardWorkspaceOwner"]){gMTHybridWorkspace=result;MTLog(@"[HYBRID-WS] captured workspace=%@",result);}
-    return result;
-}
-static void MTHybridInstallWorkspaceCapture(void){
-    Class c=NSClassFromString(@"DBWorkspace");Method m=c?class_getInstanceMethod(c,NSSelectorFromString(@"initWithOwner:")):NULL;
-    if(!m){MTLog(@"[HYBRID-WS] DBWorkspace/initWithOwner missing");return;}
-    mtOrigWorkspaceInit=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridWorkspaceInit);
-    MTLog(@"[HYBRID-WS] capture installed");
-}
-
-static void MTHybridRefreshRosterAndActivate(void){
-    Class info=NSClassFromString(@"DBApplicationInfo");
-    Class proxy=NSClassFromString(@"LSApplicationProxy");
-    if(!info||!proxy){MTLog(@"[HYBRID-ROSTER] prerequisites info=%@ proxy=%@",info,proxy);return;}
-    @try{
-        id p=((id(*)(id,SEL,id))objc_msgSend)(proxy,NSSelectorFromString(@"applicationProxyForIdentifier:"),@"com.google.ios.youtube");
-        MTLog(@"[HYBRID-ROSTER] proxy=%@",p);
-        id ai=nil;
-        for(NSString *name in @[@"initWithApplicationProxy:",@"initWithApplicationProxy:carPlayDeclaration:"]){
-            SEL sel=NSSelectorFromString(name);if(![[info alloc] respondsToSelector:sel])continue;
-            if([name containsString:@"carPlayDeclaration"]){
-                Class dc=NSClassFromString(@"CRCarPlayAppDeclaration");id d=dc?[dc new]:nil;
-                if([d respondsToSelector:NSSelectorFromString(@"setSupportsTemplates:")])((void(*)(id,SEL,BOOL))objc_msgSend)(d,NSSelectorFromString(@"setSupportsTemplates:"),NO);
-                if([d respondsToSelector:NSSelectorFromString(@"setSupportsMaps:")])((void(*)(id,SEL,BOOL))objc_msgSend)(d,NSSelectorFromString(@"setSupportsMaps:"),YES);
-                if([d respondsToSelector:NSSelectorFromString(@"setBundleIdentifier:")])((void(*)(id,SEL,id))objc_msgSend)(d,NSSelectorFromString(@"setBundleIdentifier:"),@"com.google.ios.youtube");
-                ai=((id(*)(id,SEL,id,id))objc_msgSend)([info alloc],sel,p,d);
-            }else ai=((id(*)(id,SEL,id))objc_msgSend)([info alloc],sel,p);
-            if(ai){MTLog(@"[HYBRID-ROSTER] built appInfo via %@ => %@",name,ai);break;}
-        }
-        if(!ai)return;
-        id dash=gMTHybridDashboard;
-        MTLog(@"[HYBRID-ROSTER] live launch owner=%@",dash);
-        if(dash){
-            SEL pre=NSSelectorFromString(@"preflightRequiredForApplicationInfo:");
-            if([dash respondsToSelector:pre])MTLog(@"[HYBRID-ROSTER] preflight=%d",((BOOL(*)(id,SEL,id))objc_msgSend)(dash,pre,ai));
-            MTLog(@"[HYBRID-ROSTER] DBApplicationInfo is not launchInfo; waiting to capture native launch contract. sample=%@",gMTHybridNativeLaunchArg);
-        }
-    }@catch(NSException *e){MTLog(@"[HYBRID-ROSTER] ERROR %@ %@",e.name,e.reason);}
-}
-#pragma mark - MiniTa hybrid bridge (DuoPhone host + CarSurf-style role bridge)
-
-static BOOL MTHybridIsYTProxy(id proxy){
-    @try { id b=MTV(proxy,@"bundleIdentifier"); return [b isEqualToString:@"com.google.ios.youtube"]; }
-    @catch(__unused NSException *e){ return NO; }
-}
-static IMP mtOrigInfo=nil, mtOrigEnt2=nil, mtOrigEnt3=nil;
-static id MTHybridInfo(id self,SEL _cmd,NSString *key,Class expected){
-    id value=((id(*)(id,SEL,id,id))mtOrigInfo)(self,_cmd,key,expected);
-    if(!MTHybridIsYTProxy(self)) return value;
+static IMP ctOrigInfo=nil, ctOrigEnt2=nil, ctOrigEnt3=nil;
+static id CTHybridInfo(id self,SEL _cmd,NSString *key,Class expected){
+    id value=((id(*)(id,SEL,id,id))ctOrigInfo)(self,_cmd,key,expected);
+    if(!CTIsEnabledApp(self)) return value;
     @try{
         if([key isEqualToString:@"SBStarkLaunchModes"] && (!expected||expected==NSArray.class)){
-            MTLog(@"[HYBRID-ADMIT] SBStarkLaunchModes");
             return value?:@[@"Default"];
         }
         if([key isEqualToString:@"UIApplicationSceneManifest"] && (!expected||expected==NSDictionary.class)){
@@ -765,153 +53,621 @@ static id MTHybridInfo(id self,SEL _cmd,NSString *key,Class expected){
             NSDictionary *old=manifest[@"UISceneConfigurations"];
             NSMutableDictionary *cfg=[old isKindOfClass:NSDictionary.class]?[old mutableCopy]:[NSMutableDictionary dictionary];
             for(NSString *role in [cfg.allKeys copy]) if([role hasPrefix:@"CPTemplateApplication"]) [cfg removeObjectForKey:role];
-            if(!cfg[@"UIWindowSceneSessionRoleCarPlay"]) cfg[@"UIWindowSceneSessionRoleCarPlay"]=@[@{@"UISceneConfigurationName":@"MiniTa"}];
+            if(!cfg[@"UIWindowSceneSessionRoleCarPlay"]) cfg[@"UIWindowSceneSessionRoleCarPlay"]=@[@{@"UISceneConfigurationName":@"ConnectTA"}];
             manifest[@"UISceneConfigurations"]=cfg;
             manifest[@"UIApplicationSupportsMultipleScenes"]=@YES;
             [manifest removeObjectForKey:@"CPSupportsDashboardNavigationScene"];
             [manifest removeObjectForKey:@"CPSupportsInstrumentClusterNavigationScene"];
-            MTLog(@"[HYBRID-ADMIT] manifest roles=%@",cfg.allKeys);
             return manifest;
         }
-    }@catch(NSException *e){MTLog(@"[HYBRID-ADMIT] info error %@ %@",e.name,e.reason);}
+    }@catch(NSException *e){CTLog(@"[HYBRID-ADMIT] info error %@ %@",e.name,e.reason);}
     return value;
 }
-static BOOL MTHybridCapability(NSString *key){
+static BOOL CTHybridCapability(NSString *key){
     return [key isEqualToString:@"CARCapableApp"]||[key isEqualToString:@"SBStarkCapable"];
 }
-static BOOL MTHybridTemplateCapability(NSString *key){
+static BOOL CTHybridTemplateCapability(NSString *key){
     return [key hasPrefix:@"com.apple.developer.carplay-"]||[key isEqualToString:@"com.apple.developer.playable-content"];
 }
-static id MTHybridEnt2(id self,SEL _cmd,NSString *key,Class expected){
-    id value=((id(*)(id,SEL,id,id))mtOrigEnt2)(self,_cmd,key,expected);
-    if(!MTHybridIsYTProxy(self)) return value;
-    if(MTHybridTemplateCapability(key)){MTLog(@"[HYBRID-ADMIT] hide entitlement %@",key);return nil;}
-    if(!value&&MTHybridCapability(key)&&(!expected||expected==NSNumber.class)){MTLog(@"[HYBRID-ADMIT] grant %@",key);return @YES;}
+static id CTHybridEnt2(id self,SEL _cmd,NSString *key,Class expected){
+    id value=((id(*)(id,SEL,id,id))ctOrigEnt2)(self,_cmd,key,expected);
+    if(!CTIsEnabledApp(self)) return value;
+    if(CTHybridTemplateCapability(key)){return nil;}
+    if(!value&&CTHybridCapability(key)&&(!expected||expected==NSNumber.class)){return @YES;}
     return value;
 }
-static id MTHybridEnt3(id self,SEL _cmd,NSString *key,Class expected,Class valuesExpected){
-    id value=((id(*)(id,SEL,id,id,id))mtOrigEnt3)(self,_cmd,key,expected,valuesExpected);
-    if(!MTHybridIsYTProxy(self)) return value;
-    if(MTHybridTemplateCapability(key)){MTLog(@"[HYBRID-ADMIT] hide entitlement %@",key);return nil;}
-    if(!value&&MTHybridCapability(key)&&(!expected||expected==NSNumber.class)){MTLog(@"[HYBRID-ADMIT] grant %@",key);return @YES;}
+static id CTHybridEnt3(id self,SEL _cmd,NSString *key,Class expected,Class valuesExpected){
+    id value=((id(*)(id,SEL,id,id,id))ctOrigEnt3)(self,_cmd,key,expected,valuesExpected);
+    if(!CTIsEnabledApp(self)) return value;
+    if(CTHybridTemplateCapability(key)){return nil;}
+    if(!value&&CTHybridCapability(key)&&(!expected||expected==NSNumber.class)){return @YES;}
     return value;
 }
-static void MTHybridInstallAdmission(void){
-    Class c=NSClassFromString(@"LSBundleProxy"); if(!c){MTLog(@"[HYBRID-ADMIT] LSBundleProxy missing");return;}
+static void CTHybridInstallAdmission(void){
+    Class c=NSClassFromString(@"LSBundleProxy"); if(!c){CTLog(@"[HYBRID-ADMIT] LSBundleProxy missing");return;}
     Method m=class_getInstanceMethod(c,NSSelectorFromString(@"objectForInfoDictionaryKey:ofClass:"));
-    if(m){mtOrigInfo=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridInfo);}
+    if(m){ctOrigInfo=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridInfo);}
     m=class_getInstanceMethod(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:"));
-    if(m){mtOrigEnt2=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridEnt2);}
+    if(m){ctOrigEnt2=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridEnt2);}
     m=class_getInstanceMethod(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:valuesOfClass:"));
-    if(m){mtOrigEnt3=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridEnt3);}
-    MTLog(@"[HYBRID-ADMIT] installed info=%d ent2=%d ent3=%d",mtOrigInfo!=nil,mtOrigEnt2!=nil,mtOrigEnt3!=nil);
+    if(m){ctOrigEnt3=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridEnt3);}
+    CTLog(@"[HYBRID-ADMIT] installed info=%d ent2=%d ent3=%d",ctOrigInfo!=nil,ctOrigEnt2!=nil,ctOrigEnt3!=nil);
 }
 
-static IMP mtOrigSceneConfigInit=nil,mtOrigSessionRole=nil,mtOrigSupportsMulti=nil;
-static BOOL MTHybridCarRole(NSString *r){return [r hasPrefix:@"CPTemplateApplicationSceneSessionRole"]||[r hasPrefix:@"UIWindowSceneSessionRoleCarPlay"];}
-static id MTHybridSceneConfigInit(id self,SEL _cmd,NSString *name,NSString *role){
-    if(MTHybridCarRole(role)){
-        MTLog(@"[HYBRID-APP] rewrite config role %@ -> %@",role,UIWindowSceneSessionRoleApplication);
-        id o=((id(*)(id,SEL,id,id))mtOrigSceneConfigInit)(self,_cmd,nil,UIWindowSceneSessionRoleApplication);
-        if([o respondsToSelector:@selector(setSceneClass:)]) ((void(*)(id,SEL,id))objc_msgSend)(o,@selector(setSceneClass:),UIWindowScene.class);
-        return o;
+// Set tablet identity before YouTube creates/caches its UI.
+// Scoped by explicit Logos group initialization to the YouTube process only.
+%group CTTabletIdentity
+%hook UIDevice
+- (UIUserInterfaceIdiom)userInterfaceIdiom {
+    return UIUserInterfaceIdiomPad;
+}
+%end
+%hook UITraitCollection
+- (UIUserInterfaceIdiom)userInterfaceIdiom {
+    return UIUserInterfaceIdiomPad;
+}
+%end
+%end
+
+static UIWindow *gAppCarWindow=nil, *gDonorWindow=nil;
+static UIViewController *gMovedRoot=nil, *gDonorPlaceholder=nil;
+static BOOL gAppPumpRunning=NO;
+static NSUInteger gAppEpoch=0;
+static IMP ctOrigSceneConfigInit=nil,ctOrigSessionRole=nil;
+static IMP ctOrigSetDelegate=nil,ctOrigDelegateConfig=nil;
+static Class gPatchedDelegateClass=Nil;
+static NSArray<NSString *> *CTClientStages(void){
+    return @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet"];
+}
+static NSString *CTClientStatusName(NSString *bundle){return [@"com.sushibta.connectta.client." stringByAppendingString:bundle];}
+static NSMutableDictionary<NSString *,NSNumber *> *gClientObservers;
+static void CTObserveClients(void){
+    for(NSNumber *token in gClientObservers.allValues)notify_cancel(token.intValue);
+    gClientObservers=[NSMutableDictionary dictionary];
+    for(NSString *bundle in CTEnabledIdentifiers()){
+        int token=-1;
+        uint32_t result=notify_register_dispatch(CTClientStatusName(bundle).UTF8String,&token,dispatch_get_main_queue(),^(int t){
+            uint64_t state=0;notify_get_state(t,&state);
+            NSArray *stages=CTClientStages();
+            CTLog(@"[CLIENT] bundle=%@ stage=%@",bundle,(state>0 && state<=stages.count)?stages[state-1]:@"not-loaded");
+        });
+        if(result==NOTIFY_STATUS_OK){
+            gClientObservers[bundle]=@(token);
+            uint64_t state=0;notify_get_state(token,&state);
+            NSArray *stages=CTClientStages();
+            CTLog(@"[CLIENT-SNAPSHOT] bundle=%@ stage=%@",bundle,(state>0 && state<=stages.count)?stages[state-1]:@"not-loaded");
+        }
     }
-    return ((id(*)(id,SEL,id,id))mtOrigSceneConfigInit)(self,_cmd,name,role);
 }
-static id MTHybridSessionRole(id self,SEL _cmd){
-    NSString *r=((id(*)(id,SEL))mtOrigSessionRole)(self,_cmd);
-    if(MTHybridCarRole(r)){MTLog(@"[HYBRID-APP] rewrite session role %@",r);return UIWindowSceneSessionRoleApplication;}
-    return r;
+static void CTAppStage(const char *stage){
+    static int token=-1;
+    NSString *status=CTClientStatusName(NSBundle.mainBundle.bundleIdentifier);
+    if(token<0 && notify_register_check(status.UTF8String,&token)!=NOTIFY_STATUS_OK){token=-1;return;}
+    NSUInteger index=[CTClientStages() indexOfObject:[NSString stringWithUTF8String:stage]];
+    if(index!=NSNotFound){notify_set_state(token,index+1);notify_post(status.UTF8String);}
 }
-static BOOL MTHybridSupportsMulti(id self,SEL _cmd){(void)self;(void)_cmd;return YES;}
-static void MTHybridInstallAppBridge(void){
-    Method m=class_getInstanceMethod(UISceneConfiguration.class,@selector(initWithName:sessionRole:));
-    if(m){mtOrigSceneConfigInit=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSceneConfigInit);}
-    m=class_getInstanceMethod(UISceneSession.class,@selector(role));
-    if(m){mtOrigSessionRole=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSessionRole);}
-    Class manifest=NSClassFromString(@"UIApplicationSceneManifest");
-    m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
-    if(m){mtOrigSupportsMulti=method_getImplementation(m);method_setImplementation(m,(IMP)MTHybridSupportsMulti);}
-    MTLog(@"[HYBRID-APP] installed config=%d role=%d multi=%d",mtOrigSceneConfigInit!=nil,mtOrigSessionRole!=nil,mtOrigSupportsMulti!=nil);
-    [[NSNotificationCenter defaultCenter] addObserverForName:UISceneDidActivateNotification object:nil queue:nil usingBlock:^(NSNotification *n){
-        UIScene *scene=n.object; NSString *sid=scene.session.persistentIdentifier?:@"";
-        MTLog(@"[HYBRID-APP] ACTIVATE sid=%@ role=%@ class=%@ screen=%@",sid,scene.session.role,NSStringFromClass(scene.class),[scene isKindOfClass:UIWindowScene.class]?((UIWindowScene*)scene).screen:nil);
+// Lay out the live app at tablet width before mapping its coordinates to CarPlay.
+// UIKit performs inverse coordinate conversion for gestures in the transformed canvas.
+@interface CTTabletContainer : UIViewController
+@property(nonatomic,strong) UIViewController *content;
+@property(nonatomic,strong) UIView *canvas;
+@property(nonatomic,strong) NSArray<NSLayoutConstraint *> *contentConstraints;
+@property(nonatomic,assign) CGRect reportedViewport;
+@property(nonatomic,assign) CGSize originalPreferredSize;
+@property(nonatomic,assign) BOOL originalTranslates;
+@property(nonatomic,assign) BOOL originalPresentationContext;
+@property(nonatomic,assign) UIViewAutoresizing originalAutoresizing;
+@property(nonatomic,assign) CGRect originalBounds;
+@property(nonatomic,assign) CGPoint originalCenter;
+@property(nonatomic,assign) CGAffineTransform originalTransform;
+- (instancetype)initWithContent:(UIViewController *)content;
+- (void)detachContent;
+@end
+@implementation CTTabletContainer
+- (instancetype)initWithContent:(UIViewController *)content {
+    self=[super initWithNibName:nil bundle:nil];
+    if(self){
+        _content=content;_originalPreferredSize=content.preferredContentSize;_originalPresentationContext=content.definesPresentationContext;
+        UIView *v=content.view;
+        _originalTranslates=v.translatesAutoresizingMaskIntoConstraints;
+        _originalAutoresizing=v.autoresizingMask;
+        _originalBounds=v.bounds;_originalCenter=v.center;_originalTransform=v.transform;
+    }
+    return self;
+}
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor=UIColor.blackColor;
+    self.view.clipsToBounds=YES;
+    self.canvas=[[UIView alloc]initWithFrame:CGRectMake(0,0,1024,576)];
+    self.canvas.backgroundColor=UIColor.blackColor;
+    [self.view addSubview:self.canvas];
+    [self addChildViewController:self.content];
+    if(gYouTubeLayout){
+    UITraitCollection *traits=[UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        [UITraitCollection traitCollectionWithUserInterfaceIdiom:UIUserInterfaceIdiomPad],
+        [UITraitCollection traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassRegular],
+        [UITraitCollection traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular],
+        [UITraitCollection traitCollectionWithPreferredContentSizeCategory:UIContentSizeCategoryMedium]
+    ]];
+    [self setOverrideTraitCollection:traits forChildViewController:self.content];
+    }
+    UIView *v=self.content.view;
+    v.transform=CGAffineTransformIdentity;
+    v.translatesAutoresizingMaskIntoConstraints=NO;
+    [self.canvas addSubview:v];
+    self.contentConstraints=@[
+        [v.leadingAnchor constraintEqualToAnchor:self.canvas.leadingAnchor],
+        [v.trailingAnchor constraintEqualToAnchor:self.canvas.trailingAnchor],
+        [v.topAnchor constraintEqualToAnchor:self.canvas.topAnchor],
+        [v.bottomAnchor constraintEqualToAnchor:self.canvas.bottomAnchor]
+    ];
+    [NSLayoutConstraint activateConstraints:self.contentConstraints];
+    [self.content didMoveToParentViewController:self];
+    // Keep presentations owned by the content subtree when UIKit permits it.
+    self.content.definesPresentationContext=YES;
+    CTAppStage("tablet");
+}
+- (void)viewSafeAreaInsetsDidChange {
+    [super viewSafeAreaInsetsDidChange];
+    [self.view setNeedsLayout];
+}
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    [coordinator animateAlongsideTransition:^(__unused id<UIViewControllerTransitionCoordinatorContext> context){
+        [self.view setNeedsLayout];[self.view layoutIfNeeded];
+    } completion:^(__unused id<UIViewControllerTransitionCoordinatorContext> context){
+        [self.view setNeedsLayout];[self.view layoutIfNeeded];
     }];
 }
-%hook DBDashboard
-- (void)_handleCarPlayUIReady {
-    %orig;
-    static BOOL once=NO;if(once)return;once=YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHybridRefreshRosterAndActivate();});
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // UIKit supplies the app-safe rectangle: reserve the dock on whichever side
+    // the head unit places it. Do not hard-code screen width or dock thickness.
+    CGRect viewport=CGRectIntersection(self.view.bounds,self.view.safeAreaLayoutGuide.layoutFrame);
+    if(CGRectIsNull(viewport) || CGRectIsEmpty(viewport))return;
+    if(CGRectEqualToRect(viewport,self.reportedViewport))return;
+    self.reportedViewport=viewport;
+    CGFloat logicalWidth=gYouTubeLayout?1024.0:viewport.size.width;
+    CGFloat scale=viewport.size.width/logicalWidth;
+    CGSize logical=CGSizeMake(logicalWidth,viewport.size.height/scale);
+    self.canvas.bounds=(CGRect){CGPointZero,logical};
+    self.canvas.center=CGPointMake(CGRectGetMidX(viewport),CGRectGetMidY(viewport));
+    self.canvas.transform=CGAffineTransformMakeScale(scale,scale);
+    // The child is entirely inside the safe area; UIKit computes its local
+    // safe area after the transform. Auto Layout reflows against logical bounds.
+    if(!CGSizeEqualToSize(self.content.preferredContentSize,logical))self.content.preferredContentSize=logical;
+    [self.canvas setNeedsLayout];[self.canvas layoutIfNeeded];
+    [self.content.view setNeedsLayout];[self.content.view layoutIfNeeded];
+
+
+}
+- (BOOL)shouldAutorotate{return YES;}
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations{return UIInterfaceOrientationMaskLandscape;}
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation{return UIInterfaceOrientationLandscapeRight;}
+- (BOOL)prefersStatusBarHidden{return YES;}
+- (BOOL)prefersHomeIndicatorAutoHidden{return YES;}
+- (void)detachContent {
+    if(self.content.parentViewController==self){
+        [self.content willMoveToParentViewController:nil];
+        self.content.definesPresentationContext=self.originalPresentationContext;
+        self.content.preferredContentSize=self.originalPreferredSize;
+        [NSLayoutConstraint deactivateConstraints:self.contentConstraints];
+        self.contentConstraints=nil;
+        [self setOverrideTraitCollection:nil forChildViewController:self.content];
+        UIView *v=self.content.view;
+        [v removeFromSuperview];[self.content removeFromParentViewController];
+        v.transform=self.originalTransform;v.bounds=self.originalBounds;v.center=self.originalCenter;
+        v.autoresizingMask=self.originalAutoresizing;
+        v.translatesAutoresizingMaskIntoConstraints=self.originalTranslates;
+    }
+}
+@end
+static CTTabletContainer *gTabletContainer=nil;
+
+static BOOL CTHybridCarRole(NSString *role){return [role hasPrefix:@"CPTemplateApplicationSceneSessionRole"]||[role hasPrefix:@"UIWindowSceneSessionRoleCarPlay"];}
+static BOOL CTAppCarSession(UISceneSession *session){
+    NSString *role=ctOrigSessionRole?((id(*)(id,SEL))ctOrigSessionRole)(session,@selector(role)):session.role;
+    return CTHybridCarRole(role)||[session.persistentIdentifier hasPrefix:@"Car["];
+}
+static BOOL CTAppCarScene(UIScene *scene){
+    return [scene isKindOfClass:UIWindowScene.class] && (CTAppCarSession(scene.session)||((UIWindowScene*)scene).screen!=UIScreen.mainScreen);
+}
+static void CTAppRestore(void){
+    gAppEpoch++;gAppPumpRunning=NO;
+    if(gMovedRoot){
+        [gTabletContainer detachContent];
+        gAppCarWindow.rootViewController=nil;
+        gTabletContainer=nil;
+        if(gDonorWindow && gDonorWindow.rootViewController==gDonorPlaceholder)gDonorWindow.rootViewController=gMovedRoot;
+    }
+    gAppCarWindow.hidden=YES;gAppCarWindow=nil;gDonorWindow=nil;gMovedRoot=nil;gDonorPlaceholder=nil;
+}
+static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
+    if(epoch!=gAppEpoch)return;
+    @try{
+        UIWindowScene *car=nil;
+        for(UIScene *scene in UIApplication.sharedApplication.connectedScenes)if(CTAppCarScene(scene)){car=(UIWindowScene*)scene;break;}
+        // Connection/activation notifications restart discovery when CarPlay appears.
+        if(!car){gAppPumpRunning=NO;return;}
+        if(car && !gAppCarWindow){
+            gAppCarWindow=[[UIWindow alloc]initWithWindowScene:car];
+            gAppCarWindow.frame=(CGRect){CGPointZero,car.coordinateSpace.bounds.size};
+            gAppCarWindow.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+            UIViewController *loading=[UIViewController new];
+            loading.view.backgroundColor=[UIColor colorWithRed:0.05 green:0.09 blue:0.16 alpha:1];
+            UILabel *label=[[UILabel alloc]initWithFrame:loading.view.bounds];
+            label.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+            label.text=@"ConnectTA — Đang mở ứng dụng…";label.textColor=UIColor.whiteColor;label.textAlignment=NSTextAlignmentCenter;
+            [loading.view addSubview:label];gAppCarWindow.rootViewController=loading;
+            [gAppCarWindow makeKeyAndVisible];CTAppStage("window");
+        }
+        if(gAppCarWindow && !gMovedRoot){
+            NSMutableOrderedSet *windows=[NSMutableOrderedSet orderedSetWithArray:UIApplication.sharedApplication.windows?:@[]];
+            for(UIScene *scene in UIApplication.sharedApplication.connectedScenes){
+                if([scene isKindOfClass:UIWindowScene.class] && !CTAppCarScene(scene))[windows addObjectsFromArray:((UIWindowScene*)scene).windows];
+            }
+            id delegateWindow=CTV(UIApplication.sharedApplication.delegate,@"window");
+            if([delegateWindow isKindOfClass:UIWindow.class] && ![windows containsObject:delegateWindow])[windows addObject:delegateWindow];
+            UIWindow *donor=nil;
+            for(UIWindow *window in windows){
+                if(window==gAppCarWindow || window.screen!=UIScreen.mainScreen || !window.rootViewController || window.windowLevel!=UIWindowLevelNormal)continue;
+                if(!donor || (donor.hidden && !window.hidden))donor=window;
+            }
+            if(donor){
+                gDonorWindow=donor;gMovedRoot=donor.rootViewController;
+                gDonorPlaceholder=[UIViewController new];gDonorPlaceholder.view.backgroundColor=UIColor.blackColor;
+                donor.rootViewController=gDonorPlaceholder;
+                gTabletContainer=[[CTTabletContainer alloc]initWithContent:gMovedRoot];
+                gAppCarWindow.rootViewController=gTabletContainer;
+                [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
+                [gAppCarWindow makeKeyAndVisible];CTAppStage("root");
+                CTLog(@"[CLIENT-ROOT] class=%@ frame=%@ scene=%@",NSStringFromClass(gMovedRoot.class),NSStringFromCGRect(gMovedRoot.view.frame),car.session.persistentIdentifier);
+            }
+        }
+    }@catch(NSException *e){CTAppStage("error");CTLog(@"[CLIENT-ERROR] %@ %@",e.name,e.reason);}
+    if(!gMovedRoot && attempt<40){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{CTAppPump(attempt+1,epoch);});}
+    else{gAppPumpRunning=NO;if(!gMovedRoot)CTAppStage(gAppCarWindow?"no-root":"no-scene");}
+}
+static void CTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot)return;gAppPumpRunning=YES;CTAppPump(0,gAppEpoch);});}
+static void CTAppResizeScene(UIWindowScene *scene){
+    if(!gAppCarWindow || gAppCarWindow.windowScene!=scene)return;
+    CGRect bounds=(CGRect){CGPointZero,scene.coordinateSpace.bounds.size};
+    if(CGRectIsEmpty(bounds))return;
+    if(!CGRectEqualToRect(gAppCarWindow.frame,bounds))gAppCarWindow.frame=bounds;
+    [gAppCarWindow setNeedsLayout];[gAppCarWindow layoutIfNeeded];
+    [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
+}
+@interface CTAppCarSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@end
+@implementation CTAppCarSceneDelegate
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options {
+    (void)scene;(void)session;(void)options;CTAppStage("connect");CTAppStart();
+}
+- (void)sceneDidBecomeActive:(UIScene *)scene {
+    CTAppStart();
+    if([scene isKindOfClass:UIWindowScene.class])CTAppResizeScene((UIWindowScene*)scene);
+}
+- (void)windowScene:(UIWindowScene *)scene didUpdateCoordinateSpace:(id<UICoordinateSpace>)previousCoordinateSpace interfaceOrientation:(UIInterfaceOrientation)previousInterfaceOrientation traitCollection:(UITraitCollection *)previousTraitCollection {
+    (void)previousCoordinateSpace;(void)previousInterfaceOrientation;(void)previousTraitCollection;
+    CTAppResizeScene(scene);
+}
+- (void)sceneDidDisconnect:(UIScene *)scene {if(scene==gAppCarWindow.windowScene)CTAppRestore();}
+@end
+static id CTHybridSceneConfigInit(id self,SEL cmd,NSString *name,NSString *role){
+    BOOL car=CTHybridCarRole(role);
+    id result=((id(*)(id,SEL,id,id))ctOrigSceneConfigInit)(self,cmd,car?nil:name,car?UIWindowSceneSessionRoleApplication:role);
+    if(car){((UISceneConfiguration*)result).sceneClass=UIWindowScene.class;((UISceneConfiguration*)result).delegateClass=CTAppCarSceneDelegate.class;CTAppStage("config");}
+    return result;
+}
+static id CTHybridSessionRole(id self,SEL cmd){NSString *role=((id(*)(id,SEL))ctOrigSessionRole)(self,cmd);return CTHybridCarRole(role)?UIWindowSceneSessionRoleApplication:role;}
+static BOOL CTHybridSupportsMulti(id self,SEL cmd){(void)self;(void)cmd;return YES;}
+static UISceneConfiguration *CTDelegateConfig(id self,SEL cmd,UIApplication *app,UISceneSession *session,UISceneConnectionOptions *options){
+    if(CTAppCarSession(session)){
+        UISceneConfiguration *config=[[UISceneConfiguration alloc]initWithName:nil sessionRole:UIWindowSceneSessionRoleApplication];
+        config.sceneClass=UIWindowScene.class;config.delegateClass=CTAppCarSceneDelegate.class;CTAppStage("config");return config;
+    }
+    if(ctOrigDelegateConfig)return ((id(*)(id,SEL,id,id,id))ctOrigDelegateConfig)(self,cmd,app,session,options);
+    return session.configuration;
+}
+static void CTInstallDelegate(id delegate){
+    if(!delegate||gPatchedDelegateClass)return;
+    Class cls=object_getClass(delegate);SEL sel=@selector(application:configurationForConnectingSceneSession:options:);
+    Method method=class_getInstanceMethod(cls,sel);ctOrigDelegateConfig=method?method_getImplementation(method):NULL;
+    const char *types=method?method_getTypeEncoding(method):"@@:@@@";
+    class_replaceMethod(cls,sel,(IMP)CTDelegateConfig,types);gPatchedDelegateClass=cls;
+}
+static void CTSetDelegate(id self,SEL cmd,id delegate){CTInstallDelegate(delegate);((void(*)(id,SEL,id))ctOrigSetDelegate)(self,cmd,delegate);}
+static void CTHybridInstallAppBridge(void){
+    Method m=class_getInstanceMethod(UISceneConfiguration.class,@selector(initWithName:sessionRole:));
+    if(m){ctOrigSceneConfigInit=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSceneConfigInit);}
+    m=class_getInstanceMethod(UISceneSession.class,@selector(role));
+    if(m){ctOrigSessionRole=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSessionRole);}
+    Class manifest=NSClassFromString(@"UIApplicationSceneManifest");m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
+    if(m){method_setImplementation(m,(IMP)CTHybridSupportsMulti);}
+    m=class_getInstanceMethod(UIApplication.class,@selector(setDelegate:));
+    if(m){ctOrigSetDelegate=method_getImplementation(m);method_setImplementation(m,(IMP)CTSetDelegate);}
+    CTInstallDelegate(UIApplication.sharedApplication.delegate);
+    for(NSString *name in @[UISceneWillConnectNotification,UISceneDidActivateNotification,UIApplicationDidBecomeActiveNotification]){
+        [[NSNotificationCenter defaultCenter]addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note){CTAppStart();}];
+    }
+    [[NSNotificationCenter defaultCenter]addObserverForName:UISceneDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){if(note.object==gAppCarWindow.windowScene)CTAppRestore();}];
+    CTAppStage("loaded");CTAppStart();
 }
 
-- (void)_launchAppWithInfo:(id)info forURL:(id)url {
-    MTLog(@"[HYBRID-CONTRACT] native launch arg=%@ class=%@ application=%@ appClass=%@",info,NSStringFromClass([info class]),MTV(info,@"application"),NSStringFromClass([MTV(info,@"application") class]));
-    gMTHybridNativeLaunchArg=info;
-    %orig;
+// Policy is evaluated outside the YouTube process as well as in CarPlayApp.
+static id CTHomePolicy(id policy,id declaration){
+    if(!CTIsEnabledApp(declaration))return policy;
+    if(!policy)policy=[NSClassFromString(@"CRCarPlayAppPolicy") new];
+    if(!policy)return nil;
+    @try{
+        [policy setValue:@YES forKey:@"carPlaySupported"];
+        [policy setValue:@YES forKey:@"canDisplayOnCarScreen"];
+        [policy setValue:@NO forKey:@"launchUsingSiri"];
+        [policy setValue:@NO forKey:@"launchUsingMusicUIService"];
+        [policy setValue:@NO forKey:@"launchUsingTemplateUI"];
+        static dispatch_once_t once;
+        dispatch_once(&once,^{CTLog(@"[HOME-POLICY] Selected app supported; direct app launch");});
+    }@catch(NSException *e){CTLog(@"[HOME-POLICY-ERROR] %@",e);}
+    return policy;
 }
-- (void)_handleOpenApplicationEvent:(id)event {
-    MTLog(@"[HYBRID-OPEN] event=%@ class=%@",event,NSStringFromClass([event class]));
-    id ctx=MTV(event,@"context");
-    if(!ctx){@try{ctx=[event valueForKey:@"_context"];}@catch(__unused NSException*e){}}
-    if(ctx){
-        MTLog(@"[HYBRID-CONTEXT] value=%@ class=%@",ctx,NSStringFromClass([ctx class]));
-        for(NSString*k in @[@"application",@"applicationInfo",@"bundleIdentifier",@"URL",@"url",@"identifier",@"sourceApplication",@"targetApplication"]){
-            id v=MTV(ctx,k);if(v)MTLog(@"[HYBRID-CONTEXT] key=%@ value=%@ class=%@",k,v,NSStringFromClass([v class]));
-        }
-        static BOOL cd=NO;if(!cd){cd=YES;unsigned int mc2=0;Method*mm=class_copyMethodList([ctx class],&mc2);
-            for(unsigned int j=0;j<mc2;j++){NSString*n=NSStringFromSelector(method_getName(mm[j]));NSString*l=n.lowercaseString;
-                if([l containsString:@"application"]||[l containsString:@"bundle"]||[l containsString:@"identifier"]||[l containsString:@"url"]||[l hasPrefix:@"set"])
-                    MTLog(@"[HYBRID-CONTEXT-METHOD] -%@ types=%s",n,method_getTypeEncoding(mm[j]));}free(mm);}
-    }
-    for(NSString *k in @[@"application",@"applicationInfo",@"launchInfo",@"bundleIdentifier",@"URL",@"url",@"source",@"type",@"name",@"payload",@"userInfo",@"value",@"identifier"]){
-        id v=MTV(event,k);if(v)MTLog(@"[HYBRID-OPEN] key=%@ value=%@ class=%@",k,v,NSStringFromClass([v class]));
-    }
-    static BOOL dumped=NO;if(!dumped){dumped=YES;
-        unsigned int ic=0;Ivar *ivs=class_copyIvarList([event class],&ic);
-        BOOL hasObjectPayload=NO, hasWritableTarget=NO;
-        for(unsigned int i=0;i<ic;i++){
-            const char*n=ivar_getName(ivs[i]);const char*t=ivar_getTypeEncoding(ivs[i]);id v=nil;
-            /* raw object_getIvar disabled after v6 crash */
-            if(t&&t[0]=='@'&&v)hasObjectPayload=YES;
-            NSString *in=n?[NSString stringWithUTF8String:n]:@"";
-            NSString *il=in.lowercaseString;
-            if([il containsString:@"application"]||[il containsString:@"bundle"]||[il containsString:@"identifier"]||[il containsString:@"payload"]||[il containsString:@"info"])hasWritableTarget=YES;
-            MTLog(@"[HYBRID-EVENT-IVAR] %s type=%s value=%@ class=%@",n?:"?",t?:"?",v,NSStringFromClass([v class]));
-        }free(ivs);
-        unsigned int mc=0;Method *ms=class_copyMethodList([event class],&mc);
-        for(unsigned int i=0;i<mc;i++){NSString*n=NSStringFromSelector(method_getName(ms[i]));NSString*l=n.lowercaseString;
-            if([l containsString:@"application"]||[l containsString:@"bundle"]||[l containsString:@"payload"]||[l containsString:@"event"]||[l containsString:@"identifier"]||[l containsString:@"value"]||[l containsString:@"info"]||[l hasPrefix:@"set"])
-                MTLog(@"[HYBRID-EVENT-METHOD] -%@ types=%s",n,method_getTypeEncoding(ms[i]));}free(ms);
-        MTLog(@"[HYBRID-DUAL] A(native)=TRUE event continues unchanged");
-        MTLog(@"[HYBRID-DUAL] B(retarget-candidate)=%@ objectPayload=%d writableNameCandidate=%d",
-              (hasObjectPayload&&hasWritableTarget)?@"TRUE":@"FALSE",hasObjectPayload,hasWritableTarget);
-    }
-    %orig;
+%group CTHomeAdmission
+%hook CRCarPlayAppDeclaration
+- (BOOL)supportsAudio {
+    if(CTIsEnabledApp(self))return YES;
+    return %orig;
 }
 %end
+%hook CRCarPlayAppPolicyEvaluator
+- (id)effectivePolicyForAppDeclaration:(id)declaration {
+    id policy=%orig;
+    return CTHomePolicy(policy,declaration);
+}
+- (id)effectivePolicyForAppDeclaration:(id)declaration inVehicleWithCertificateSerial:(id)serial {
+    id policy=%orig;
+    return CTHomePolicy(policy,declaration);
+}
+%end
+%end
+
+// Feed Home the installed application's native DBLeafIcon, not an overlay button.
+static NSMutableDictionary *gHomeIcons;
+static NSString *CTHomeIconIdentifier(id icon){
+    id identifier=CTV(CTV(icon,@"applicationInfo"),@"bundleIdentifier");
+    if(![identifier isKindOfClass:NSString.class])identifier=CTV(icon,@"applicationBundleID");
+    if(![identifier isKindOfClass:NSString.class])identifier=CTV(icon,@"leafIdentifier");
+    return [identifier isKindOfClass:NSString.class]?identifier:nil;
+}
+static BOOL CTHomeIsEnabledIcon(id icon){return CTEnabled(CTHomeIconIdentifier(icon));}
+static id CTHomeIcon(NSString *identifier){
+    if(!gHomeIcons)gHomeIcons=[NSMutableDictionary dictionary];
+    if(gHomeIcons[identifier])return gHomeIcons[identifier];
+    @try{
+        Class proxyClass=NSClassFromString(@"LSApplicationProxy");
+        Class infoClass=NSClassFromString(@"DBApplicationInfo");
+        Class iconClass=NSClassFromString(@"DBLeafIcon");
+        SEL lookup=NSSelectorFromString(@"applicationProxyForIdentifier:");
+        SEL infoInit=NSSelectorFromString(@"initWithApplicationProxy:");
+        SEL iconInit=NSSelectorFromString(@"initWithApplicationInfo:");
+        if(![proxyClass respondsToSelector:lookup] || ![infoClass instancesRespondToSelector:infoInit] ||
+           ![iconClass instancesRespondToSelector:iconInit])return nil;
+        id proxy=((id(*)(id,SEL,id))objc_msgSend)(proxyClass,lookup,identifier);
+        if(![CTV(proxy,@"bundleIdentifier") isEqual:identifier] || !CTV(proxy,@"bundleURL"))return nil;
+        id info=((id(*)(id,SEL,id))objc_msgSend)([infoClass alloc],infoInit,proxy);
+        if(!info)return nil;
+        id icon=((id(*)(id,SEL,id))objc_msgSend)([iconClass alloc],iconInit,info);
+        if(icon)gHomeIcons[identifier]=icon;
+        CTLog(@"[APPBRIDGE-ICON] %@ created=%d",identifier,icon!=nil);
+        return icon;
+    }@catch(NSException *e){CTLog(@"[APPBRIDGE-ICON-ERROR] %@ %@",identifier,e);}
+    return nil;
+}
+static id CTHomeIncludeApps(id original){
+    if(original && ![original isKindOfClass:NSArray.class])return original;
+    NSMutableSet *existing=[NSMutableSet set];
+    for(id icon in original){NSString *identifier=CTHomeIconIdentifier(icon);if(identifier)[existing addObject:identifier];}
+    NSMutableArray *icons=nil;
+    for(NSString *identifier in CTEnabledIdentifiers()){
+        if([existing containsObject:identifier])continue;
+        id icon=CTHomeIcon(identifier);
+        if(!icon)continue;
+        if(!icons)icons=original?[original mutableCopy]:[NSMutableArray array];
+        [icons addObject:icon];[existing addObject:identifier];
+    }
+    return icons?[icons copy]:original;
+}
+%hook DBDashboardHomeViewController
+- (id)allApplicationIcons {
+    id icons=%orig;
+    return CTHomeIncludeApps(icons);
+}
+- (BOOL)isIconVisible:(id)icon {
+    if(CTHomeIsEnabledIcon(icon))return YES;
+    return %orig;
+}
+- (BOOL)isIconVisibleForIdentifier:(id)identifier {
+    if(CTEnabled(identifier))return YES;
+    return %orig;
+}
+%end
+%hook DBIconLayoutVehicleDataProvider
+- (id)allApplicationIcons {
+    id icons=%orig;
+    return CTHomeIncludeApps(icons);
+}
+%end
+%hook DBIconModel
+- (BOOL)isIconVisible:(id)icon {
+    if(CTHomeIsEnabledIcon(icon))return YES;
+    return %orig;
+}
+- (id)hiddenBundleIdentifiers {
+    id original=%orig;
+    if(![original isKindOfClass:NSArray.class])return original;
+    NSMutableArray *hidden=[original mutableCopy];
+    [hidden removeObjectsInArray:CTEnabledIdentifiers()];
+    return [hidden copy];
+}
+%end
+
+%hook DBApplicationInfo
+- (BOOL)presentsUnderStatusBar {
+    if(CTIsEnabledApp(self))return NO;
+    return %orig;
+}
+- (BOOL)isHidden {
+    if(CTIsEnabledApp(self))return NO;
+    return %orig;
+}
+%end
+// Host owns screen-space placement; client owns a zero-origin local window.
+static CGRect CTNativeAppViewport(id dashboard,CGRect original){
+    UIWindowScene *scene=CTV(dashboard,@"windowScene");
+    if(![scene isKindOfClass:UIWindowScene.class])return original;
+    CGRect display=scene.coordinateSpace.bounds;
+    id config=CTV(dashboard,@"environmentConfiguration");
+    id area=CTV(config,@"viewAreaFrame");
+    if([area isKindOfClass:NSValue.class] && strcmp([area objCType],@encode(CGRect))==0){
+        CGRect candidate=[area CGRectValue];
+        CGRect clipped=CGRectIntersection(display,candidate);
+        if(!CGRectIsNull(clipped) && !CGRectIsEmpty(clipped))display=clipped;
+    }
+    SEL insetsSelector=NSSelectorFromString(@"statusBarInsets");
+    if(![dashboard respondsToSelector:insetsSelector])return original;
+    UIEdgeInsets insets=((UIEdgeInsets(*)(id,SEL))objc_msgSend)(dashboard,insetsSelector);
+    if(insets.top<0 || insets.left<0 || insets.bottom<0 || insets.right<0)return original;
+    CGRect viewport=UIEdgeInsetsInsetRect(display,insets);
+    if(CGRectIsEmpty(viewport) || CGRectIsNull(viewport))return original;
+    return viewport;
+}
+static char kCTAligning;
+static void CTAlignNativeHost(id controller){
+    if(!CTIsEnabledApp(CTV(controller,@"applicationInfo")))return;
+    if([objc_getAssociatedObject(controller,&kCTAligning) boolValue])return;
+    UIViewController *vc=(UIViewController*)controller;
+    if(!vc.isViewLoaded || !vc.view.window || !vc.view.superview)return;
+    UIView *root=vc.view;
+    UIView *host=CTV(controller,@"sceneHostView");
+    if(![host isKindOfClass:UIView.class] || !host.superview || ![host isDescendantOfView:root])return;
+    UIWindowScene *scene=root.window.windowScene;
+    if(!scene)return;
+    objc_setAssociatedObject(controller,&kCTAligning,@YES,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    @try{
+        CGRect before=[root convertRect:root.bounds toCoordinateSpace:scene.coordinateSpace];
+        CGRect target=CTNativeAppViewport(CTV(controller,@"environment"),before);
+        CGRect local=[root.superview convertRect:target fromCoordinateSpace:scene.coordinateSpace];
+        // Convert screen geometry through the actual parent. Never add 45 points
+        // blindly: the parent may already be positioned beyond the dock.
+        if(CGAffineTransformIsIdentity(root.transform) && !CGRectEqualToRect(root.frame,local))root.frame=local;
+        CGRect hostLocal=[host.superview convertRect:root.bounds fromView:root];
+        if(CGAffineTransformIsIdentity(host.transform) && !CGRectEqualToRect(host.frame,hostLocal))host.frame=hostLocal;
+    }@catch(NSException *e){CTLog(@"[HOST-ERROR] %@",e);}
+    @finally{objc_setAssociatedObject(controller,&kCTAligning,@NO,OBJC_ASSOCIATION_RETAIN_NONATOMIC);}
+}
 %hook DBApplicationSceneViewController
-- (void)foregroundSceneWithSettings:(id)settings completion:(id)completion{
- NSString*sid=MTV((id)self,@"sceneID"); MTProbeControllerEnvironment((id)self,sid); NSString*b=MTBundleFromSID(sid);
- if(b&&[settings isKindOfClass:NSDictionary.class]&&settings[@"DBActivationSettingLaunchSource"]){
-   gYTController=(id)self;gYTSettings=[settings copy];MTLog(@"[CAPTURE] youtube sid=%@ controller=%@ source=%@",sid,NSStringFromClass(object_getClass((id)self)),settings[@"DBActivationSettingLaunchSource"]);
-   static BOOL mtDidDumpScene=NO; if(!mtDidDumpScene){mtDidDumpScene=YES;dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTDumpSceneInternals((id)self);});}
-   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(1.0*NSEC_PER_SEC)),dispatch_get_main_queue(),^{MTHostYouTube();});
- }
- %orig;
+- (id)initWithApplicationInfo:(id)app proxyApplicationInfo:(id)proxy environment:(id)environment {
+    if(CTIsEnabledApp(app)){
+        CTLog(@"[HOST-INIT] remove controller proxy=%@",proxy);
+        proxy=nil;
+    }
+    return %orig(app,proxy,environment);
+}
+- (id)_initWithApplicationInfo:(id)app proxyApplicationInfo:(id)proxy environment:(id)environment {
+    if(CTIsEnabledApp(app))proxy=nil;
+    return %orig(app,proxy,environment);
+}
+- (BOOL)presentsUnderStatusBar {
+    if(CTIsEnabledApp(CTV(self,@"applicationInfo")))return NO;
+    return %orig;
+}
+- (void)viewDidLayoutSubviews {
+    %orig;
+    CTAlignNativeHost(self);
+}
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    CTAlignNativeHost(self);
+}
+- (void)setSceneHostView:(id)view {
+    %orig;
+    if(CTIsEnabledApp(CTV(self,@"applicationInfo")))dispatch_async(dispatch_get_main_queue(),^{CTAlignNativeHost(self);});
 }
 %end
-%ctor{@autoreleasepool{
-    NSString *bundle=NSBundle.mainBundle.bundleIdentifier?:@"";
-    if([bundle isEqualToString:@"com.google.ios.youtube"]){
-        MTLog(@"=== MINITA HYBRID APP === bundle=%@ process=%@",bundle,NSProcessInfo.processInfo.processName);
-        MTHybridInstallAppBridge();
-        return;
+
+%hook DBDashboard
+- (CGRect)sceneFrameForAppInfo:(id)app {
+    CGRect frame=%orig;
+    return CTIsEnabledApp(app)?CTNativeAppViewport(self,frame):frame;
+}
+- (CGRect)sceneFrameForAppInfo:(id)app proxyAppInfo:(id)proxy {
+    CGRect frame=%orig;
+    return CTIsEnabledApp(app)?CTNativeAppViewport(self,frame):frame;
+}
+- (UIEdgeInsets)safeAreaInsetsForAppInfo:(id)app {
+    if(CTIsEnabledApp(app))return UIEdgeInsetsZero;
+    return %orig;
+}
+- (UIEdgeInsets)safeAreaInsetsForAppInfo:(id)app proxyAppInfo:(id)proxy {
+    if(CTIsEnabledApp(app))return UIEdgeInsetsZero;
+    return %orig;
+}
+- (id)sceneIdentifierForAppInfo:(id)info {
+    id original=%orig;
+    if(CTIsEnabledApp(info) && [original isKindOfClass:NSString.class]){
+        NSString *sid=original;
+        sid=[sid stringByReplacingOccurrencesOfString:@":com.apple.MusicUIService:" withString:@":"];
+        sid=[sid stringByReplacingOccurrencesOfString:@":com.apple.CarPlayTemplateUIHost:" withString:@":"];
+        CTLog(@"[DIRECT-ID] %@ -> %@",original,sid);return sid;
     }
-    if(![bundle isEqualToString:@"com.apple.CarPlayApp"]) return;
-    [[NSFileManager defaultManager]removeItemAtPath:MTLogPath error:nil];
-    MTLog(@"=== MINITA HYBRID CARPLAY === bundle=%@ process=%@",bundle,NSProcessInfo.processInfo.processName);
-    MTHybridInstallAdmission();
-    MTHybridInstallWorkspaceCapture();
-    MTLog(@"[HYBRID] workspace mode installed; waiting for CarPlay UI ready");
-}}
+    return original;
+}
+%end
+%hook DBSceneUpdate
+- (id)initWithApplicationInfo:(id)app proxyApplicationInfo:(id)proxy environment:(id)env activationSettings:(id)settings {
+    BOOL target=CTIsEnabledApp(app);
+    if(target)proxy=nil;
+    id result=%orig(app,proxy,env,settings);
+    if(target)CTLog(@"[HOME-NATIVE-UPDATE] app=%@ proxy=%@",CTV(result,@"applicationInfo"),CTV(result,@"proxyApplicationInfo"));
+    return result;
+}
+%end
+
+%ctor {
+    @autoreleasepool {
+        NSString *bundle=NSBundle.mainBundle.bundleIdentifier;
+        CTReloadConfiguration();
+        if(CTEligibleIdentifier(bundle) && CTReadPublishedEnabled(bundle,CTEnabled(bundle))){
+            if(![NSBundle.mainBundle.bundlePath.pathExtension isEqualToString:@"app"])return;
+            gAppClient=YES;
+            gYouTubeLayout=[bundle isEqualToString:@"com.google.ios.youtube"];
+            if(gYouTubeLayout){
+                %init(CTTabletIdentity);
+            }
+            CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ tablet=%d",bundle,gYouTubeLayout);
+            CTHybridInstallAppBridge();return;
+        }
+        BOOL car=[bundle isEqualToString:@"com.apple.CarPlayApp"];
+        BOOL spring=[bundle isEqualToString:@"com.apple.springboard"];
+        BOOL daemon=[NSProcessInfo.processInfo.processName isEqualToString:@"carplayd"];
+        if(!car && !spring && !daemon)return;
+        if(spring)CTPublishEnabledApps([NSSet setWithArray:CTEnabledIdentifiers()]);
+        int preferencesToken=0;
+        notify_register_dispatch(CTPreferencesChanged,&preferencesToken,dispatch_get_main_queue(),^(__unused int token){
+            CTReloadConfiguration();
+            if(spring)CTPublishEnabledApps([NSSet setWithArray:CTEnabledIdentifiers()]);
+            [gHomeIcons removeAllObjects];
+            if(car)CTObserveClients();
+            CTLog(@"[APPBRIDGE-CONFIG] %@; reconnect CarPlay after changing apps",CTEnabledIdentifiers());
+        });
+        dlopen("/System/Library/PrivateFrameworks/CarKit.framework/CarKit",RTLD_NOW);
+        %init(CTHomeAdmission);
+        if(!car){CTHybridInstallAdmission();return;}
+        %init;
+        [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/ConnectTA.txt" error:nil];
+        CTLog(@"[DIRECT-BOOT] native Home icon launch; no automatic Maps launch or overlay host");
+        CTObserveClients();
+        CTHybridInstallAdmission();
+
+    }
+}
+

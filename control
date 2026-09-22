@@ -1,9 +1,13 @@
-Package: com.sushibta.minita
-Name: MiniTa
-Version: 0.2.0
+Package: com.sushibta.connectta
+Name: ConnectTA
+Version: 0.4.0
 Architecture: iphoneos-arm64
-Description: MiniTa Phase 2 YouTube scene capture and CarPlay host experiment.
+Description: ConnectTA app bridge for CarPlay with per-app selection.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks
-Depends: mobilesubstrate
+Depends: mobilesubstrate, preferenceloader
+
+Conflicts: com.sushibta.minita
+Replaces: com.sushibta.minita
+Provides: com.sushibta.minita
