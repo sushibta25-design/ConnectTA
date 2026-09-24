@@ -385,7 +385,7 @@ static void CTHybridInstallAppBridge(void){
     m=class_getInstanceMethod(UISceneSession.class,@selector(role));
     if(m){MSHookMessageEx(UISceneSession.class,@selector(role),(IMP)CTHybridSessionRole,(IMP *)&ctOrigSessionRole);}
     Class manifest=NSClassFromString(@"UIApplicationSceneManifest");m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
-    if(m){MSHookMessageEx(manifest,NSSelectorFromString(@"supportsMultipleScenes"),(IMP)CTHybridSupportsMulti,(IMP *)&ctOrigSupportsMulti);}
+    if(m){MSHookMessageEx(manifest,NSSelectorFromString(@"supportsMultipleScenes"),(IMP)CTHybridSupportsMulti,NULL);}
     m=class_getInstanceMethod(UIApplication.class,@selector(setDelegate:));
     if(m){MSHookMessageEx(UIApplication.class,@selector(setDelegate:),(IMP)CTSetDelegate,(IMP *)&ctOrigSetDelegate);}
     CTInstallDelegate(UIApplication.sharedApplication.delegate);
