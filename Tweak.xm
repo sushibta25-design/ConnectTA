@@ -7,7 +7,9 @@
 #import "CTConfig.h"
 
 static NSSet<NSString *> *gEnabledApps;
-static BOOL gAppClient=NO, gYouTubeLayout=NO;
+static BOOL gAppClient=NO, gYouTubeLayout=NO, gAppBridgeEnabled=NO, gAppBridgeInstalled=NO;
+static NSString *gAppBundleIdentifier=nil;
+static int gAppPreferencesToken=-1;
 static BOOL CTEnabled(id identifier){
     if(!CTEligibleIdentifier(identifier))return NO;
     @synchronized(NSProcessInfo.processInfo){return [gEnabledApps containsObject:identifier];}
@@ -20,7 +22,7 @@ static void CTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const CTBuild=@"CONNECTTA-0.4.0";
+static NSString *const CTBuild=@"CONNECTTA-0.4.1";
 static void CTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
@@ -99,12 +101,12 @@ static void CTHybridInstallAdmission(void){
 %group CTTabletIdentity
 %hook UIDevice
 - (UIUserInterfaceIdiom)userInterfaceIdiom {
-    return UIUserInterfaceIdiomPad;
+    return gAppBridgeEnabled?UIUserInterfaceIdiomPad:%orig;
 }
 %end
 %hook UITraitCollection
 - (UIUserInterfaceIdiom)userInterfaceIdiom {
-    return UIUserInterfaceIdiomPad;
+    return gAppBridgeEnabled?UIUserInterfaceIdiomPad:%orig;
 }
 %end
 %end
@@ -113,7 +115,7 @@ static UIWindow *gAppCarWindow=nil, *gDonorWindow=nil;
 static UIViewController *gMovedRoot=nil, *gDonorPlaceholder=nil;
 static BOOL gAppPumpRunning=NO;
 static NSUInteger gAppEpoch=0;
-static IMP ctOrigSceneConfigInit=nil,ctOrigSessionRole=nil;
+static IMP ctOrigSceneConfigInit=nil,ctOrigSessionRole=nil,ctOrigSupportsMulti=nil;
 static IMP ctOrigSetDelegate=nil,ctOrigDelegateConfig=nil;
 static Class gPatchedDelegateClass=Nil;
 static NSArray<NSString *> *CTClientStages(void){
@@ -285,6 +287,7 @@ static void CTAppRestore(void){
 }
 static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
     if(epoch!=gAppEpoch)return;
+    if(!gAppBridgeEnabled){gAppPumpRunning=NO;return;}
     @try{
         UIWindowScene *car=nil;
         for(UIScene *scene in UIApplication.sharedApplication.connectedScenes)if(CTAppCarScene(scene)){car=(UIWindowScene*)scene;break;}
@@ -329,9 +332,15 @@ static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
     if(!gMovedRoot && attempt<40){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{CTAppPump(attempt+1,epoch);});}
     else{gAppPumpRunning=NO;if(!gMovedRoot)CTAppStage(gAppCarWindow?"no-root":"no-scene");}
 }
-static void CTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot)return;gAppPumpRunning=YES;CTAppPump(0,gAppEpoch);});}
+static void CTAppStart(void){
+    dispatch_async(dispatch_get_main_queue(),^{
+        if(!gAppBridgeEnabled){if(gMovedRoot)CTAppRestore();return;}
+        if(gAppPumpRunning||gMovedRoot)return;
+        gAppPumpRunning=YES;CTAppPump(0,gAppEpoch);
+    });
+}
 static void CTAppResizeScene(UIWindowScene *scene){
-    if(!gAppCarWindow || gAppCarWindow.windowScene!=scene)return;
+    if(!gAppBridgeEnabled || !gAppCarWindow || gAppCarWindow.windowScene!=scene)return;
     CGRect bounds=(CGRect){CGPointZero,scene.coordinateSpace.bounds.size};
     if(CGRectIsEmpty(bounds))return;
     if(!CGRectEqualToRect(gAppCarWindow.frame,bounds))gAppCarWindow.frame=bounds;
@@ -355,15 +364,15 @@ static void CTAppResizeScene(UIWindowScene *scene){
 - (void)sceneDidDisconnect:(UIScene *)scene {if(scene==gAppCarWindow.windowScene)CTAppRestore();}
 @end
 static id CTHybridSceneConfigInit(id self,SEL cmd,NSString *name,NSString *role){
-    BOOL car=CTHybridCarRole(role);
+    BOOL car=gAppBridgeEnabled&&CTHybridCarRole(role);
     id result=((id(*)(id,SEL,id,id))ctOrigSceneConfigInit)(self,cmd,car?nil:name,car?UIWindowSceneSessionRoleApplication:role);
     if(car){((UISceneConfiguration*)result).sceneClass=UIWindowScene.class;((UISceneConfiguration*)result).delegateClass=CTAppCarSceneDelegate.class;CTAppStage("config");}
     return result;
 }
-static id CTHybridSessionRole(id self,SEL cmd){NSString *role=((id(*)(id,SEL))ctOrigSessionRole)(self,cmd);return CTHybridCarRole(role)?UIWindowSceneSessionRoleApplication:role;}
-static BOOL CTHybridSupportsMulti(id self,SEL cmd){(void)self;(void)cmd;return YES;}
+static id CTHybridSessionRole(id self,SEL cmd){NSString *role=((id(*)(id,SEL))ctOrigSessionRole)(self,cmd);return gAppBridgeEnabled&&CTHybridCarRole(role)?UIWindowSceneSessionRoleApplication:role;}
+static BOOL CTHybridSupportsMulti(id self,SEL cmd){return gAppBridgeEnabled?YES:((BOOL(*)(id,SEL))ctOrigSupportsMulti)(self,cmd);}
 static UISceneConfiguration *CTDelegateConfig(id self,SEL cmd,UIApplication *app,UISceneSession *session,UISceneConnectionOptions *options){
-    if(CTAppCarSession(session)){
+    if(gAppBridgeEnabled&&CTAppCarSession(session)){
         UISceneConfiguration *config=[[UISceneConfiguration alloc]initWithName:nil sessionRole:UIWindowSceneSessionRoleApplication];
         config.sceneClass=UIWindowScene.class;config.delegateClass=CTAppCarSceneDelegate.class;CTAppStage("config");return config;
     }
@@ -377,14 +386,16 @@ static void CTInstallDelegate(id delegate){
     const char *types=method?method_getTypeEncoding(method):"@@:@@@";
     class_replaceMethod(cls,sel,(IMP)CTDelegateConfig,types);gPatchedDelegateClass=cls;
 }
-static void CTSetDelegate(id self,SEL cmd,id delegate){CTInstallDelegate(delegate);((void(*)(id,SEL,id))ctOrigSetDelegate)(self,cmd,delegate);}
+static void CTSetDelegate(id self,SEL cmd,id delegate){if(gAppBridgeEnabled)CTInstallDelegate(delegate);((void(*)(id,SEL,id))ctOrigSetDelegate)(self,cmd,delegate);}
 static void CTHybridInstallAppBridge(void){
+    if(gAppBridgeInstalled)return;
+    gAppBridgeInstalled=YES;
     Method m=class_getInstanceMethod(UISceneConfiguration.class,@selector(initWithName:sessionRole:));
     if(m){ctOrigSceneConfigInit=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSceneConfigInit);}
     m=class_getInstanceMethod(UISceneSession.class,@selector(role));
     if(m){ctOrigSessionRole=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSessionRole);}
     Class manifest=NSClassFromString(@"UIApplicationSceneManifest");m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
-    if(m){method_setImplementation(m,(IMP)CTHybridSupportsMulti);}
+    if(m){ctOrigSupportsMulti=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSupportsMulti);}
     m=class_getInstanceMethod(UIApplication.class,@selector(setDelegate:));
     if(m){ctOrigSetDelegate=method_getImplementation(m);method_setImplementation(m,(IMP)CTSetDelegate);}
     CTInstallDelegate(UIApplication.sharedApplication.delegate);
@@ -393,6 +404,31 @@ static void CTHybridInstallAppBridge(void){
     }
     [[NSNotificationCenter defaultCenter]addObserverForName:UISceneDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){if(note.object==gAppCarWindow.windowScene)CTAppRestore();}];
     CTAppStage("loaded");CTAppStart();
+}
+
+// Keep AltList changes effective in an app process that is already resident.
+// Invasive scene hooks are installed only while that app's ConnectTA switch is ON.
+static void CTRefreshAppClient(void){
+    if(!gAppClient||!gAppBundleIdentifier)return;
+    BOOL enabled=CTReadPublishedEnabled(gAppBundleIdentifier,CTEnabled(gAppBundleIdentifier));
+    if(enabled==gAppBridgeEnabled)return;
+    gAppBridgeEnabled=enabled;
+    if(enabled){
+        CTHybridInstallAppBridge();
+        CTLog(@"[APPBRIDGE-CONFIG] %@ ON; activating existing process",gAppBundleIdentifier);
+        CTAppStart();
+    }else{
+        CTAppRestore();
+        CTLog(@"[APPBRIDGE-CONFIG] %@ OFF; restored iPhone app root",gAppBundleIdentifier);
+    }
+}
+static void CTInstallAppClientObserver(void){
+    if(notify_register_dispatch(CTPreferencesChanged,&gAppPreferencesToken,dispatch_get_main_queue(),^(__unused int token){
+        CTReloadConfiguration();CTRefreshAppClient();
+    })!=NOTIFY_STATUS_OK)gAppPreferencesToken=-1;
+    [[NSNotificationCenter defaultCenter]addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note){
+        CTReloadConfiguration();CTRefreshAppClient();
+    }];
 }
 
 // Policy is evaluated outside the YouTube process as well as in CarPlayApp.
@@ -636,15 +672,16 @@ static void CTAlignNativeHost(id controller){
     @autoreleasepool {
         NSString *bundle=NSBundle.mainBundle.bundleIdentifier;
         CTReloadConfiguration();
-        if(CTEligibleIdentifier(bundle) && CTReadPublishedEnabled(bundle,CTEnabled(bundle))){
-            if(![NSBundle.mainBundle.bundlePath.pathExtension isEqualToString:@"app"])return;
+        if(CTEligibleIdentifier(bundle) && [NSBundle.mainBundle.bundlePath.pathExtension isEqualToString:@"app"]){
             gAppClient=YES;
+            gAppBundleIdentifier=bundle;
             gYouTubeLayout=[bundle isEqualToString:@"com.google.ios.youtube"];
-            if(gYouTubeLayout){
-                %init(CTTabletIdentity);
-            }
-            CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ tablet=%d",bundle,gYouTubeLayout);
-            CTHybridInstallAppBridge();return;
+            if(gYouTubeLayout){%init(CTTabletIdentity);}
+            CTInstallAppClientObserver();
+            gAppBridgeEnabled=CTReadPublishedEnabled(bundle,CTEnabled(bundle));
+            CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ enabled=%d tablet=%d",bundle,gAppBridgeEnabled,gYouTubeLayout);
+            if(gAppBridgeEnabled)CTHybridInstallAppBridge();
+            return;
         }
         BOOL car=[bundle isEqualToString:@"com.apple.CarPlayApp"];
         BOOL spring=[bundle isEqualToString:@"com.apple.springboard"];
@@ -670,4 +707,3 @@ static void CTAlignNativeHost(id controller){
 
     }
 }
-
