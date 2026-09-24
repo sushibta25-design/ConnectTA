@@ -23,8 +23,11 @@ assert 'CTReadPublishedEnabled(bundle,CTEnabled(bundle))' in source
 assert 'if(spring)CTPublishEnabledApps' in source
 assert 'com.apple.UIKitCore' in (root / 'ConnectTA.plist').read_text()
 assert 'notify_register_dispatch(CTPreferencesChanged' in source
+assert 'CTInstallAppClientObserver();' in source
+assert 'CTRefreshAppClient();' in source
+assert 'if(!gAppBridgeEnabled){if(gMovedRoot)CTAppRestore();return;}' in source
+assert 'gAppBridgeEnabled&&CTHybridCarRole(role)' in source
 assert 'com.apple.UIKit' in (root / 'ConnectTA.plist').read_text()
 assert 'SUBPROJECTS += prefs' in (root / 'Makefile').read_text()
 assert 'preferenceloader' in (root / 'control').read_text()
-print('PASS: package plists, shared preferences, per-app gating, YouTube-only layout, legacy removal')
-
+print('PASS: package plists, shared preferences, live per-app ON/OFF refresh, YouTube-only layout, legacy removal')
