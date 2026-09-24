@@ -1,6 +1,6 @@
 # ConnectTA
 
-Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarPlay. Gói thử 0.4.4 dành cho Dopamine rootless, arm64/arm64e, iOS 15 trở lên; chưa xác nhận RootHide.
+Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarPlay. Gói thử 0.4.5 dành cho Dopamine rootless, arm64/arm64e, iOS 15 trở lên; chưa xác nhận RootHide.
 
 ## Chức năng giữ lại
 
@@ -26,7 +26,7 @@ Bản này không sửa lỗi phát tiếp sau camera lùi. Căn khung với b�
 
 Log giới hạn khoảng 1 MiB/file: /var/mobile/ConnectTA.txt, /var/mobile/ConnectTA-admission.txt và Documents/ConnectTA-client.txt trong app. Giữ lỗi và các mốc lifecycle; bỏ log resize liên tục, NSLog trùng và kênh client80 cũ. Không thêm polling thường trực.
 
-Build: Theos + iPhoneOS SDK; make clean package FINALPACKAGE=1. GitHub Actions build pull request và main, artifact ConnectTA-0.4.4-ROOTLESS. Log host ConnectTA.txt ghi số cửa sổ CarPlay/điện thoại khi app kết thúc ở no-root; không cần lấy ConnectTA-client.txt trong container ứng dụng. CI chỉ kiểm tra build và cấu hình; cần thử icon, ON/OFF, fullscreen, reconnect và phối hợp chia màn trên máy thật.
+Build: Theos + iPhoneOS SDK; make clean package FINALPACKAGE=1. GitHub Actions build pull request và main, artifact ConnectTA-0.4.5-ROOTLESS. Maps/VML không tìm thấy cửa sổ/root thì thử yêu cầu UIKit tạo scene ứng dụng iPhone một lần; YouTube không dùng nhánh này. Log host ConnectTA.txt ghi số cửa sổ CarPlay/điện thoại khi app kết thúc ở no-root; không cần lấy ConnectTA-client.txt trong container ứng dụng. CI chỉ kiểm tra build và cấu hình; cần thử icon, ON/OFF, fullscreen, reconnect và phối hợp chia màn trên máy thật.
 
 ## Mốc khôi phục
 
