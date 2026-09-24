@@ -114,19 +114,20 @@ static void CTHybridInstallAdmission(void){
 static UIWindow *gAppCarWindow=nil, *gDonorWindow=nil;
 static UIViewController *gMovedRoot=nil, *gDonorPlaceholder=nil;
 static BOOL gAppPumpRunning=NO;
+static BOOL gPhoneSceneRequested=NO;
 static NSUInteger gAppEpoch=0;
 static IMP ctOrigSceneConfigInit=nil,ctOrigSessionRole=nil,ctOrigSupportsMulti=nil;
 static IMP ctOrigSetDelegate=nil,ctOrigDelegateConfig=nil;
 static Class gPatchedDelegateClass=Nil;
 static NSArray<NSString *> *CTClientStages(void){
-    return @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet"];
+    return @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"off",@"phone-scene-requested"];
 }
 static NSString *CTClientStatusName(NSString *bundle){return [@"com.sushibta.connectta.client." stringByAppendingString:bundle];}
 static NSMutableDictionary<NSString *,NSNumber *> *gClientObservers;
 static void CTObserveClients(void){
-    for(NSNumber *token in gClientObservers.allValues)notify_cancel(token.intValue);
-    gClientObservers=[NSMutableDictionary dictionary];
+    if(!gClientObservers)gClientObservers=[NSMutableDictionary dictionary];
     for(NSString *bundle in CTEnabledIdentifiers()){
+        if(gClientObservers[bundle])continue;
         int token=-1;
         uint32_t result=notify_register_dispatch(CTClientStatusName(bundle).UTF8String,&token,dispatch_get_main_queue(),^(int t){
             uint64_t state=0;notify_get_state(t,&state);
@@ -284,6 +285,33 @@ static void CTAppRestore(void){
         if(gDonorWindow && gDonorWindow.rootViewController==gDonorPlaceholder)gDonorWindow.rootViewController=gMovedRoot;
     }
     gAppCarWindow.hidden=YES;gAppCarWindow=nil;gDonorWindow=nil;gMovedRoot=nil;gDonorPlaceholder=nil;
+    gPhoneSceneRequested=NO;
+}
+static UIWindow *CTFindDonorWindow(void){
+    NSMutableOrderedSet<UIWindow *> *windows=[NSMutableOrderedSet orderedSetWithArray:UIApplication.sharedApplication.windows?:@[]];
+    for(UIScene *scene in UIApplication.sharedApplication.connectedScenes){
+        if([scene isKindOfClass:UIWindowScene.class] && !CTAppCarScene(scene))
+            [windows addObjectsFromArray:((UIWindowScene*)scene).windows];
+    }
+    id delegateWindow=CTV(UIApplication.sharedApplication.delegate,@"window");
+    if([delegateWindow isKindOfClass:UIWindow.class] && ![windows containsObject:delegateWindow])
+        [windows addObject:delegateWindow];
+    UIWindow *donor=nil;
+    for(UIWindow *window in windows){
+        CTLog(@"[CLIENT-WINDOW] scene=%@ role=%@ screen=%@ hidden=%d level=%.1f root=%@",window.windowScene.session.persistentIdentifier,window.windowScene.session.role,window.screen==UIScreen.mainScreen?@"main":@"external",window.hidden,window.windowLevel,window.rootViewController?NSStringFromClass(window.rootViewController.class):@"nil");
+        if(window==gAppCarWindow || window.screen!=UIScreen.mainScreen || !window.rootViewController || window.windowLevel!=UIWindowLevelNormal)continue;
+        if(!donor || (donor.hidden && !window.hidden))donor=window;
+    }
+    return donor;
+}
+static void CTRequestPhoneScene(void){
+    if(gPhoneSceneRequested)return;
+    gPhoneSceneRequested=YES;
+    CTAppStage("phone-scene-requested");
+    CTLog(@"[CLIENT-SCENE-REQUEST] requesting a regular application scene because no iPhone root window exists");
+    [UIApplication.sharedApplication requestSceneSessionActivation:nil userActivity:nil options:nil errorHandler:^(NSError *error){
+        CTLog(@"[CLIENT-SCENE-REQUEST] failed: %@",error);
+    }];
 }
 static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
     if(epoch!=gAppEpoch)return;
@@ -306,17 +334,7 @@ static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
             [gAppCarWindow makeKeyAndVisible];CTAppStage("window");
         }
         if(gAppCarWindow && !gMovedRoot){
-            NSMutableOrderedSet *windows=[NSMutableOrderedSet orderedSetWithArray:UIApplication.sharedApplication.windows?:@[]];
-            for(UIScene *scene in UIApplication.sharedApplication.connectedScenes){
-                if([scene isKindOfClass:UIWindowScene.class] && !CTAppCarScene(scene))[windows addObjectsFromArray:((UIWindowScene*)scene).windows];
-            }
-            id delegateWindow=CTV(UIApplication.sharedApplication.delegate,@"window");
-            if([delegateWindow isKindOfClass:UIWindow.class] && ![windows containsObject:delegateWindow])[windows addObject:delegateWindow];
-            UIWindow *donor=nil;
-            for(UIWindow *window in windows){
-                if(window==gAppCarWindow || window.screen!=UIScreen.mainScreen || !window.rootViewController || window.windowLevel!=UIWindowLevelNormal)continue;
-                if(!donor || (donor.hidden && !window.hidden))donor=window;
-            }
+            UIWindow *donor=CTFindDonorWindow();
             if(donor){
                 gDonorWindow=donor;gMovedRoot=donor.rootViewController;
                 gDonorPlaceholder=[UIViewController new];gDonorPlaceholder.view.backgroundColor=UIColor.blackColor;
@@ -326,6 +344,10 @@ static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
                 [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
                 [gAppCarWindow makeKeyAndVisible];CTAppStage("root");
                 CTLog(@"[CLIENT-ROOT] class=%@ frame=%@ scene=%@",NSStringFromClass(gMovedRoot.class),NSStringFromCGRect(gMovedRoot.view.frame),car.session.persistentIdentifier);
+            }else if(attempt==2){
+                // Some apps launch their CarPlay scene without creating the phone UI scene.
+                // Ask UIKit to create a normal app scene once, then keep looking for its root.
+                CTRequestPhoneScene();
             }
         }
     }@catch(NSException *e){CTAppStage("error");CTLog(@"[CLIENT-ERROR] %@ %@",e.name,e.reason);}
@@ -419,6 +441,7 @@ static void CTRefreshAppClient(void){
         CTAppStart();
     }else{
         CTAppRestore();
+        CTAppStage("off");
         CTLog(@"[APPBRIDGE-CONFIG] %@ OFF; restored iPhone app root",gAppBundleIdentifier);
     }
 }
