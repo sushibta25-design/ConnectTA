@@ -21,7 +21,7 @@ static void CTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const CTBuild=@"CONNECTTA-0.4.4";
+static NSString *const CTBuild=@"CONNECTTA-0.4.5";
 static void CTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
@@ -112,13 +112,13 @@ static void CTHybridInstallAdmission(void){
 
 static UIWindow *gAppCarWindow=nil, *gDonorWindow=nil;
 static UIViewController *gMovedRoot=nil, *gDonorPlaceholder=nil;
-static BOOL gAppPumpRunning=NO, gAppUsesNativeCarSceneRoot=NO;
+static BOOL gAppPumpRunning=NO, gAppUsesNativeCarSceneRoot=NO, gPhoneSceneRequested=NO;
 static NSUInteger gAppEpoch=0;
 static IMP ctOrigSceneConfigInit=nil,ctOrigSessionRole=nil;
 static IMP ctOrigSetDelegate=nil,ctOrigDelegateConfig=nil;
 static Class gPatchedDelegateClass=Nil;
 static NSArray<NSString *> *CTClientStages(void){
-    return @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet"];
+    return @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"phone-scene-requested",@"phone-scene-error"];
 }
 static NSString *CTClientStatusName(NSString *bundle){return [@"com.sushibta.connectta.client." stringByAppendingString:bundle];}
 static NSMutableDictionary<NSString *,NSNumber *> *gClientObservers;
@@ -310,6 +310,16 @@ static void CTAppStageDetailed(const char *stage){
     state|=((uint64_t)MIN(connected,255)&0xff)<<32;
     CTAppPublishState(state);
 }
+static void CTRequestPhoneScene(NSUInteger attempt){
+    if(gYouTubeLayout || attempt!=2 || gPhoneSceneRequested)return;
+    gPhoneSceneRequested=YES;
+    CTAppStage("phone-scene-requested");
+    CTLog(@"[CLIENT-SCENE-REQUEST] no app window found; asking UIKit for an application scene");
+    [UIApplication.sharedApplication requestSceneSessionActivation:nil userActivity:nil options:nil errorHandler:^(NSError *error){
+        CTLog(@"[CLIENT-SCENE-REQUEST] failed: %@",error);
+        CTAppStage("phone-scene-error");
+    }];
+}
 static void CTAppRestore(void){
     gAppEpoch++;gAppPumpRunning=NO;
     if(gMovedRoot){
@@ -318,7 +328,7 @@ static void CTAppRestore(void){
         gTabletContainer=nil;
         if(gDonorWindow && gDonorWindow.rootViewController==gDonorPlaceholder)gDonorWindow.rootViewController=gMovedRoot;
     }
-    gAppCarWindow.hidden=YES;gAppCarWindow=nil;gDonorWindow=nil;gMovedRoot=nil;gDonorPlaceholder=nil;gAppUsesNativeCarSceneRoot=NO;
+    gAppCarWindow.hidden=YES;gAppCarWindow=nil;gDonorWindow=nil;gMovedRoot=nil;gDonorPlaceholder=nil;gAppUsesNativeCarSceneRoot=NO;gPhoneSceneRequested=NO;
 }
 static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
     if(epoch!=gAppEpoch)return;
@@ -373,7 +383,7 @@ static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
                 [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
                 [gAppCarWindow makeKeyAndVisible];CTAppStage("root");
                 CTLog(@"[CLIENT-ROOT] class=%@ frame=%@ scene=%@",NSStringFromClass(gMovedRoot.class),NSStringFromCGRect(gMovedRoot.view.frame),car.session.persistentIdentifier);
-            }
+            }else CTRequestPhoneScene(attempt);
         }
     }@catch(NSException *e){CTAppStage("error");CTLog(@"[CLIENT-ERROR] %@ %@",e.name,e.reason);}
     if(!gMovedRoot && attempt<40){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{CTAppPump(attempt+1,epoch);});}
