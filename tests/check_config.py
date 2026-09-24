@@ -26,5 +26,11 @@ assert 'notify_register_dispatch(CTPreferencesChanged' in source
 assert 'com.apple.UIKit' in (root / 'ConnectTA.plist').read_text()
 assert 'SUBPROJECTS += prefs' in (root / 'Makefile').read_text()
 assert 'preferenceloader' in (root / 'control').read_text()
-print('PASS: package plists, shared preferences, per-app gating, YouTube-only layout, legacy removal')
+assert 'MSHookMessageEx' in source
+assert 'method_setImplementation' not in source
+assert 'class_replaceMethod' not in source
+assert 'CTInstallAppClientObserver' not in source
+assert 'requestSceneSessionActivation' not in source
+assert 'CONNECTTA-0.4.2' in source
+print('PASS: package plists, shared preferences, chained ObjC hooks, YouTube-only layout, legacy removal')
 
