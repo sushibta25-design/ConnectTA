@@ -21,7 +21,7 @@ static void CTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const CTBuild=@"CONNECTTA-0.4.3";
+static NSString *const CTBuild=@"CONNECTTA-0.4.4";
 static void CTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
@@ -130,7 +130,12 @@ static void CTObserveClients(void){
         uint32_t result=notify_register_dispatch(CTClientStatusName(bundle).UTF8String,&token,dispatch_get_main_queue(),^(int t){
             uint64_t state=0;notify_get_state(t,&state);
             NSArray *stages=CTClientStages();
-            CTLog(@"[CLIENT] bundle=%@ stage=%@",bundle,(state>0 && state<=stages.count)?stages[state-1]:@"not-loaded");
+            NSUInteger code=(NSUInteger)(state&0xff);
+            NSString *stage=(code>0 && code<=stages.count)?stages[code-1]:@"not-loaded";
+            if(state>>8){
+                NSUInteger carWindows=(state>>8)&0xff,carRoots=(state>>16)&0xff,phoneRoots=(state>>24)&0xff,connected=(state>>32)&0xff;
+                CTLog(@"[CLIENT] bundle=%@ stage=%@ metrics carWindows=%lu carRoots=%lu phoneRoots=%lu connectedScenes=%lu",bundle,stage,(unsigned long)carWindows,(unsigned long)carRoots,(unsigned long)phoneRoots,(unsigned long)connected);
+            }else CTLog(@"[CLIENT] bundle=%@ stage=%@",bundle,stage);
         });
         if(result==NOTIFY_STATUS_OK){
             gClientObservers[bundle]=@(token);
@@ -140,12 +145,15 @@ static void CTObserveClients(void){
         }
     }
 }
-static void CTAppStage(const char *stage){
-    static int token=-1;
+static int gAppStatusToken=-1;
+static void CTAppPublishState(uint64_t state){
     NSString *status=CTClientStatusName(NSBundle.mainBundle.bundleIdentifier);
-    if(token<0 && notify_register_check(status.UTF8String,&token)!=NOTIFY_STATUS_OK){token=-1;return;}
+    if(gAppStatusToken<0 && notify_register_check(status.UTF8String,&gAppStatusToken)!=NOTIFY_STATUS_OK){gAppStatusToken=-1;return;}
+    notify_set_state(gAppStatusToken,state);notify_post(status.UTF8String);
+}
+static void CTAppStage(const char *stage){
     NSUInteger index=[CTClientStages() indexOfObject:[NSString stringWithUTF8String:stage]];
-    if(index!=NSNotFound){notify_set_state(token,index+1);notify_post(status.UTF8String);}
+    if(index!=NSNotFound)CTAppPublishState(index+1);
 }
 // Lay out the live app at tablet width before mapping its coordinates to CarPlay.
 // UIKit performs inverse coordinate conversion for gestures in the transformed canvas.
@@ -274,6 +282,30 @@ static BOOL CTAppCarSession(UISceneSession *session){
 static BOOL CTAppCarScene(UIScene *scene){
     return [scene isKindOfClass:UIWindowScene.class] && (CTAppCarSession(scene.session)||((UIWindowScene*)scene).screen!=UIScreen.mainScreen);
 }
+static void CTAppStageDetailed(const char *stage,UIWindowScene *car){
+    NSUInteger index=[CTClientStages() indexOfObject:[NSString stringWithUTF8String:stage]];
+    if(index==NSNotFound)return;
+    NSUInteger carWindows=car.windows.count,carRoots=0,phoneRoots=0,connected=UIApplication.sharedApplication.connectedScenes.count;
+    for(UIWindow *window in car.windows){
+        if(window!=gAppCarWindow && window.rootViewController && window.windowLevel==UIWindowLevelNormal)carRoots++;
+    }
+    NSMutableOrderedSet *windows=[NSMutableOrderedSet orderedSetWithArray:UIApplication.sharedApplication.windows?:@[]];
+    for(UIScene *scene in UIApplication.sharedApplication.connectedScenes){
+        if([scene isKindOfClass:UIWindowScene.class] && !CTAppCarScene(scene))[windows addObjectsFromArray:((UIWindowScene*)scene).windows];
+    }
+    id delegateWindow=CTV(UIApplication.sharedApplication.delegate,@"window");
+    if([delegateWindow isKindOfClass:UIWindow.class] && ![windows containsObject:delegateWindow])[windows addObject:delegateWindow];
+    for(UIWindow *window in windows){
+        if(window==gAppCarWindow || window.screen!=UIScreen.mainScreen || !window.rootViewController || window.windowLevel!=UIWindowLevelNormal || CTAppCarScene(window.windowScene))continue;
+        phoneRoots++;
+    }
+    uint64_t state=(uint64_t)(index+1)&0xff;
+    state|=((uint64_t)MIN(carWindows,255)&0xff)<<8;
+    state|=((uint64_t)MIN(carRoots,255)&0xff)<<16;
+    state|=((uint64_t)MIN(phoneRoots,255)&0xff)<<24;
+    state|=((uint64_t)MIN(connected,255)&0xff)<<32;
+    CTAppPublishState(state);
+}
 static void CTAppRestore(void){
     gAppEpoch++;gAppPumpRunning=NO;
     if(gMovedRoot){
@@ -341,7 +373,7 @@ static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
         }
     }@catch(NSException *e){CTAppStage("error");CTLog(@"[CLIENT-ERROR] %@ %@",e.name,e.reason);}
     if(!gMovedRoot && attempt<40){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{CTAppPump(attempt+1,epoch);});}
-    else{gAppPumpRunning=NO;if(!gMovedRoot)CTAppStage(gAppCarWindow?"no-root":"no-scene");}
+    else{gAppPumpRunning=NO;if(!gMovedRoot){if(gAppCarWindow)CTAppStageDetailed("no-root",car);else CTAppStage("no-scene");}}
 }
 static void CTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot||gAppUsesNativeCarSceneRoot)return;gAppPumpRunning=YES;CTAppPump(0,gAppEpoch);});}
 static void CTAppResizeScene(UIWindowScene *scene){
