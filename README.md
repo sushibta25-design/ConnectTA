@@ -14,7 +14,7 @@ Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarP
 
 Ngắt CarPlay, cài DEB, respring và đóng/mở lại app được bridge. Gói ConnectTA thay thế gói com.sushibta.minita để tránh nạp hai dylib. Cấu hình mới dùng com.sushibta.connectta; nếu chưa lưu cấu hình mới sẽ đọc lựa chọn cũ. Mảng rỗng vẫn nghĩa là OFF toàn bộ. Tên cũ chỉ còn ở phần tương thích nâng cấp.
 
-TAsmart/A510 hiện để OFF để giữ đường CarPlay đang hoạt động. Không bật cùng app trong hai tweak bridge. Không khẳng định mọi app đều tương thích.
+Không bật cùng một app trong nhiều tweak bridge cùng lúc. Không khẳng định mọi app đều tương thích.
 
 ## Phạm vi
 
