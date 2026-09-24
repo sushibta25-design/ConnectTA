@@ -34,6 +34,6 @@ assert 'requestSceneSessionActivation' not in source
 assert 'CLIENT-NATIVE-ROOT' in source
 assert 'config.delegateClass=CTAppCarSceneDelegate.class;' in source
 assert 'CONNECTTA-0.4.4' in source
-assert 'CTAppStageDetailed("no-root",car)' in source
+assert 'CTAppStageDetailed("no-root")' in source
 assert 'connectedScenes=%lu' in source
 print('PASS: package plists, shared preferences, chained ObjC hooks, YouTube-only layout, host no-root diagnostics, legacy removal')
