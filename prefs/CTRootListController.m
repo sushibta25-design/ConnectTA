@@ -18,8 +18,8 @@ static id CTValue(id object,NSString *key){
 - (NSMutableArray *)specifiers {
     if(_specifiers)return _specifiers;
     NSMutableArray *items=[NSMutableArray array];
-    PSSpecifier *intro=[PSSpecifier groupSpecifierWithName:@"ConnectTA 0.4.0 • Rootless"];
-    [intro setProperty:@"Bật app để đưa giao diện iPhone lên CarPlay. Ngắt CarPlay trước khi đổi. Sau đó đóng hẳn và mở lại app trên iPhone, respring rồi kết nối lại CarPlay. Tắt CarBridge cho cùng app. Chỉ dùng video khi xe đỗ." forKey:@"footerText"];
+    PSSpecifier *intro=[PSSpecifier groupSpecifierWithName:@"ConnectTA 0.4.1 • Rootless"];
+    [intro setProperty:@"ON thử đưa giao diện iPhone lên CarPlay; OFF giữ giao diện CarPlay gốc. Ngắt rồi kết nối lại CarPlay sau khi đổi. ConnectTA nhận thay đổi mà không cần respring. Tắt CarBridge cho cùng app. Chỉ dùng video khi xe đỗ." forKey:@"footerText"];
     [items addObject:intro];
     PSSpecifier *reset=[PSSpecifier preferenceSpecifierNamed:@"Tắt toàn bộ App Bridge" target:self set:NULL get:NULL detail:Nil cell:PSButtonCell edit:Nil];
     reset.buttonAction=@selector(disableAll);
@@ -43,7 +43,7 @@ static id CTValue(id object,NSString *key){
     // Retain switches for stored selections even if an app was uninstalled.
     for(NSString *identifier in CTReadEnabledApps())if(!apps[identifier])apps[identifier]=[identifier stringByAppendingString:@" (chưa tìm thấy)"];
     PSSpecifier *group=[PSSpecifier groupSpecifierWithName:@"Ứng dụng"];
-    [group setProperty:@"App OFF giữ hành vi CarPlay gốc. Với Maps/Vietmap đã có CarPlay, chỉ bật nếu muốn thử giao diện iPhone thay cho giao diện CarPlay gốc. YouTube giữ bố cục tablet; các app khác dùng kích thước vùng CarPlay. Không đảm bảo mọi app tương thích. Nếu danh sách thiếu app, đóng và mở lại Cài đặt." forKey:@"footerText"];
+    [group setProperty:@"Maps/Vietmap OFF dùng giao diện dẫn đường CarPlay gốc; ON thử giao diện iPhone. Log vừa kiểm tra cho thấy hai app này chưa kết nối được scene CarPlay. Zalo vẫn có thể yêu cầu mở trên iPhone do cách Zalo hoạt động. YouTube giữ bố cục tablet; app khác dùng kích thước vùng CarPlay. Mức tương thích tùy app." forKey:@"footerText"];
     [items addObject:group];
     NSArray *identifiers=[apps.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *a,NSString *b){return [apps[a] localizedCaseInsensitiveCompare:apps[b]];}];
     for(NSString *identifier in identifiers){
@@ -83,10 +83,9 @@ static id CTValue(id object,NSString *key){
     [self reloadSpecifier:specifier];
 }
 - (void)disableAll {
-    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Tắt ConnectTA cho mọi app?" message:@"Sau khi tắt, đóng các app đã bật và respring khi đã ngắt CarPlay." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Tắt ConnectTA cho mọi app?" message:@"Sau khi tắt, ngắt rồi kết nối lại CarPlay để dùng lại giao diện gốc." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Huỷ" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Tắt toàn bộ" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action){[self saveApps:[NSSet set]];[self reloadSpecifiers];}]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 @end
-
