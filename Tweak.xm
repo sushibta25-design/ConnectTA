@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 #import <notify.h>
 #import <dlfcn.h>
+#import <substrate.h>
 #import "CTConfig.h"
 
 static NSSet<NSString *> *gEnabledApps;
@@ -20,7 +21,7 @@ static void CTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const CTBuild=@"CONNECTTA-0.4.0";
+static NSString *const CTBuild=@"CONNECTTA-0.4.2";
 static void CTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
@@ -86,11 +87,11 @@ static id CTHybridEnt3(id self,SEL _cmd,NSString *key,Class expected,Class value
 static void CTHybridInstallAdmission(void){
     Class c=NSClassFromString(@"LSBundleProxy"); if(!c){CTLog(@"[HYBRID-ADMIT] LSBundleProxy missing");return;}
     Method m=class_getInstanceMethod(c,NSSelectorFromString(@"objectForInfoDictionaryKey:ofClass:"));
-    if(m){ctOrigInfo=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridInfo);}
+    if(m){MSHookMessageEx(c,NSSelectorFromString(@"objectForInfoDictionaryKey:ofClass:"),(IMP)CTHybridInfo,(IMP *)&ctOrigInfo);}
     m=class_getInstanceMethod(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:"));
-    if(m){ctOrigEnt2=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridEnt2);}
+    if(m){MSHookMessageEx(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:"),(IMP)CTHybridEnt2,(IMP *)&ctOrigEnt2);}
     m=class_getInstanceMethod(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:valuesOfClass:"));
-    if(m){ctOrigEnt3=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridEnt3);}
+    if(m){MSHookMessageEx(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:valuesOfClass:"),(IMP)CTHybridEnt3,(IMP *)&ctOrigEnt3);}
     CTLog(@"[HYBRID-ADMIT] installed info=%d ent2=%d ent3=%d",ctOrigInfo!=nil,ctOrigEnt2!=nil,ctOrigEnt3!=nil);
 }
 
@@ -373,20 +374,20 @@ static UISceneConfiguration *CTDelegateConfig(id self,SEL cmd,UIApplication *app
 static void CTInstallDelegate(id delegate){
     if(!delegate||gPatchedDelegateClass)return;
     Class cls=object_getClass(delegate);SEL sel=@selector(application:configurationForConnectingSceneSession:options:);
-    Method method=class_getInstanceMethod(cls,sel);ctOrigDelegateConfig=method?method_getImplementation(method):NULL;
-    const char *types=method?method_getTypeEncoding(method):"@@:@@@";
-    class_replaceMethod(cls,sel,(IMP)CTDelegateConfig,types);gPatchedDelegateClass=cls;
+    if(!class_getInstanceMethod(cls,sel))return;
+    MSHookMessageEx(cls,sel,(IMP)CTDelegateConfig,(IMP *)&ctOrigDelegateConfig);
+    gPatchedDelegateClass=cls;
 }
 static void CTSetDelegate(id self,SEL cmd,id delegate){CTInstallDelegate(delegate);((void(*)(id,SEL,id))ctOrigSetDelegate)(self,cmd,delegate);}
 static void CTHybridInstallAppBridge(void){
     Method m=class_getInstanceMethod(UISceneConfiguration.class,@selector(initWithName:sessionRole:));
-    if(m){ctOrigSceneConfigInit=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSceneConfigInit);}
+    if(m){MSHookMessageEx(UISceneConfiguration.class,@selector(initWithName:sessionRole:),(IMP)CTHybridSceneConfigInit,(IMP *)&ctOrigSceneConfigInit);}
     m=class_getInstanceMethod(UISceneSession.class,@selector(role));
-    if(m){ctOrigSessionRole=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSessionRole);}
+    if(m){MSHookMessageEx(UISceneSession.class,@selector(role),(IMP)CTHybridSessionRole,(IMP *)&ctOrigSessionRole);}
     Class manifest=NSClassFromString(@"UIApplicationSceneManifest");m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
-    if(m){method_setImplementation(m,(IMP)CTHybridSupportsMulti);}
+    if(m){MSHookMessageEx(manifest,NSSelectorFromString(@"supportsMultipleScenes"),(IMP)CTHybridSupportsMulti,(IMP *)&ctOrigSupportsMulti);}
     m=class_getInstanceMethod(UIApplication.class,@selector(setDelegate:));
-    if(m){ctOrigSetDelegate=method_getImplementation(m);method_setImplementation(m,(IMP)CTSetDelegate);}
+    if(m){MSHookMessageEx(UIApplication.class,@selector(setDelegate:),(IMP)CTSetDelegate,(IMP *)&ctOrigSetDelegate);}
     CTInstallDelegate(UIApplication.sharedApplication.delegate);
     for(NSString *name in @[UISceneWillConnectNotification,UISceneDidActivateNotification,UIApplicationDidBecomeActiveNotification]){
         [[NSNotificationCenter defaultCenter]addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note){CTAppStart();}];
