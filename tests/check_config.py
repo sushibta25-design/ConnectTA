@@ -27,6 +27,10 @@ assert 'CTInstallAppClientObserver();' in source
 assert 'CTRefreshAppClient();' in source
 assert 'if(!gAppBridgeEnabled){if(gMovedRoot)CTAppRestore();return;}' in source
 assert 'gAppBridgeEnabled&&CTHybridCarRole(role)' in source
+assert 'requestSceneSessionActivation:nil userActivity:nil options:nil' in source
+assert '[CLIENT-WINDOW] scene=' in source
+assert 'CTAppStage("off");' in source
+assert 'if(gClientObservers[bundle])continue;' in source
 assert 'com.apple.UIKit' in (root / 'ConnectTA.plist').read_text()
 assert 'SUBPROJECTS += prefs' in (root / 'Makefile').read_text()
 assert 'preferenceloader' in (root / 'control').read_text()
