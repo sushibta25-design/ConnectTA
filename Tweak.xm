@@ -282,10 +282,14 @@ static BOOL CTAppCarSession(UISceneSession *session){
 static BOOL CTAppCarScene(UIScene *scene){
     return [scene isKindOfClass:UIWindowScene.class] && (CTAppCarSession(scene.session)||((UIWindowScene*)scene).screen!=UIScreen.mainScreen);
 }
-static void CTAppStageDetailed(const char *stage,UIWindowScene *car){
+static void CTAppStageDetailed(const char *stage){
     NSUInteger index=[CTClientStages() indexOfObject:[NSString stringWithUTF8String:stage]];
     if(index==NSNotFound)return;
-    NSUInteger carWindows=car.windows.count,carRoots=0,phoneRoots=0,connected=UIApplication.sharedApplication.connectedScenes.count;
+    UIWindowScene *car=nil;
+    for(UIScene *scene in UIApplication.sharedApplication.connectedScenes){
+        if(CTAppCarScene(scene)){car=(UIWindowScene*)scene;break;}
+    }
+    NSUInteger carWindows=car?car.windows.count:0,carRoots=0,phoneRoots=0,connected=UIApplication.sharedApplication.connectedScenes.count;
     for(UIWindow *window in car.windows){
         if(window!=gAppCarWindow && window.rootViewController && window.windowLevel==UIWindowLevelNormal)carRoots++;
     }
@@ -373,7 +377,7 @@ static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
         }
     }@catch(NSException *e){CTAppStage("error");CTLog(@"[CLIENT-ERROR] %@ %@",e.name,e.reason);}
     if(!gMovedRoot && attempt<40){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{CTAppPump(attempt+1,epoch);});}
-    else{gAppPumpRunning=NO;if(!gMovedRoot){if(gAppCarWindow)CTAppStageDetailed("no-root",car);else CTAppStage("no-scene");}}
+    else{gAppPumpRunning=NO;if(!gMovedRoot){if(gAppCarWindow)CTAppStageDetailed("no-root");else CTAppStage("no-scene");}}
 }
 static void CTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot||gAppUsesNativeCarSceneRoot)return;gAppPumpRunning=YES;CTAppPump(0,gAppEpoch);});}
 static void CTAppResizeScene(UIWindowScene *scene){
