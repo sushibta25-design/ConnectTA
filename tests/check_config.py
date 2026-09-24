@@ -31,6 +31,8 @@ assert 'method_setImplementation' not in source
 assert 'class_replaceMethod' not in source
 assert 'CTInstallAppClientObserver' not in source
 assert 'requestSceneSessionActivation' not in source
-assert 'CONNECTTA-0.4.2' in source
+assert 'CLIENT-NATIVE-ROOT' in source
+assert 'config.delegateClass=CTAppCarSceneDelegate.class;' in source
+assert 'CONNECTTA-0.4.3' in source
 print('PASS: package plists, shared preferences, chained ObjC hooks, YouTube-only layout, legacy removal')
 
