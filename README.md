@@ -14,7 +14,7 @@ Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarP
 
 Ngắt CarPlay, cài DEB, respring một lần sau nâng cấp và kết nối lại. Khi đổi công tắc, chỉ cần ngắt rồi kết nối lại CarPlay; không cần respring. Gói ConnectTA thay thế gói com.sushibta.minita để tránh nạp hai dylib. Cấu hình mới dùng com.sushibta.connectta; nếu chưa lưu cấu hình mới sẽ đọc lựa chọn cũ. Mảng rỗng vẫn nghĩa là OFF toàn bộ. Tên cũ chỉ còn ở phần tương thích nâng cấp.
 
-TAsmart/A510 hiện để OFF để giữ đường CarPlay đang hoạt động. Không bật cùng app trong hai tweak bridge. Maps/VietmapLive được giữ OFF để dùng giao diện CarPlay gốc; log 0.4.0 mới nhất cho thấy khi ON, hai app chỉ đến bước cấu hình scene và không kết nối scene giao diện. Zalo tạo được scene nhưng vẫn yêu cầu mở trên iPhone. Những app này cần xử lý tương thích riêng; không khẳng định mọi app đều tương thích.
+TAsmart/A510 hiện để OFF để giữ đường CarPlay đang hoạt động. Không bật cùng app trong hai tweak bridge. Nên để Maps/VietmapLive OFF để dùng giao diện CarPlay gốc; log 0.4.0 mới nhất cho thấy khi ON, hai app chỉ đến bước cấu hình scene và không kết nối scene giao diện. Zalo tạo được scene nhưng vẫn yêu cầu mở trên iPhone. Những app này cần xử lý tương thích riêng; không khẳng định mọi app đều tương thích.
 
 ## Phạm vi
 
