@@ -43,7 +43,7 @@ static id CTValue(id object,NSString *key){
     // Retain switches for stored selections even if an app was uninstalled.
     for(NSString *identifier in CTReadEnabledApps())if(!apps[identifier])apps[identifier]=[identifier stringByAppendingString:@" (chưa tìm thấy)"];
     PSSpecifier *group=[PSSpecifier groupSpecifierWithName:@"Ứng dụng"];
-    [group setProperty:@"Maps/Vietmap OFF dùng giao diện dẫn đường CarPlay gốc; ON thử giao diện iPhone. Log vừa kiểm tra cho thấy hai app này chưa kết nối được scene CarPlay. Zalo vẫn có thể yêu cầu mở trên iPhone do cách Zalo hoạt động. YouTube giữ bố cục tablet; app khác dùng kích thước vùng CarPlay. Mức tương thích tùy app." forKey:@"footerText"];
+    [group setProperty:@"Maps/Vietmap nên để OFF để dùng giao diện dẫn đường CarPlay gốc; ON thử giao diện iPhone. Log vừa kiểm tra cho thấy hai app này chưa kết nối được scene CarPlay. Zalo vẫn có thể yêu cầu mở trên iPhone do cách Zalo hoạt động. YouTube giữ bố cục tablet; app khác dùng kích thước vùng CarPlay. Mức tương thích tùy app." forKey:@"footerText"];
     [items addObject:group];
     NSArray *identifiers=[apps.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *a,NSString *b){return [apps[a] localizedCaseInsensitiveCompare:apps[b]];}];
     for(NSString *identifier in identifiers){
