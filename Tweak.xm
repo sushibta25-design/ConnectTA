@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 #import <notify.h>
 #import <dlfcn.h>
+#import <substrate.h>
 #import "CTConfig.h"
 
 static NSSet<NSString *> *gEnabledApps;
@@ -20,7 +21,7 @@ static void CTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const CTBuild=@"CONNECTTA-0.4.0";
+static NSString *const CTBuild=@"CONNECTTA-0.4.5";
 static void CTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
@@ -86,11 +87,11 @@ static id CTHybridEnt3(id self,SEL _cmd,NSString *key,Class expected,Class value
 static void CTHybridInstallAdmission(void){
     Class c=NSClassFromString(@"LSBundleProxy"); if(!c){CTLog(@"[HYBRID-ADMIT] LSBundleProxy missing");return;}
     Method m=class_getInstanceMethod(c,NSSelectorFromString(@"objectForInfoDictionaryKey:ofClass:"));
-    if(m){ctOrigInfo=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridInfo);}
+    if(m){MSHookMessageEx(c,NSSelectorFromString(@"objectForInfoDictionaryKey:ofClass:"),(IMP)CTHybridInfo,(IMP *)&ctOrigInfo);}
     m=class_getInstanceMethod(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:"));
-    if(m){ctOrigEnt2=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridEnt2);}
+    if(m){MSHookMessageEx(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:"),(IMP)CTHybridEnt2,(IMP *)&ctOrigEnt2);}
     m=class_getInstanceMethod(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:valuesOfClass:"));
-    if(m){ctOrigEnt3=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridEnt3);}
+    if(m){MSHookMessageEx(c,NSSelectorFromString(@"entitlementValueForKey:ofClass:valuesOfClass:"),(IMP)CTHybridEnt3,(IMP *)&ctOrigEnt3);}
     CTLog(@"[HYBRID-ADMIT] installed info=%d ent2=%d ent3=%d",ctOrigInfo!=nil,ctOrigEnt2!=nil,ctOrigEnt3!=nil);
 }
 
@@ -111,13 +112,13 @@ static void CTHybridInstallAdmission(void){
 
 static UIWindow *gAppCarWindow=nil, *gDonorWindow=nil;
 static UIViewController *gMovedRoot=nil, *gDonorPlaceholder=nil;
-static BOOL gAppPumpRunning=NO;
+static BOOL gAppPumpRunning=NO, gAppUsesNativeCarSceneRoot=NO, gPhoneSceneRequested=NO;
 static NSUInteger gAppEpoch=0;
 static IMP ctOrigSceneConfigInit=nil,ctOrigSessionRole=nil;
 static IMP ctOrigSetDelegate=nil,ctOrigDelegateConfig=nil;
 static Class gPatchedDelegateClass=Nil;
 static NSArray<NSString *> *CTClientStages(void){
-    return @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet"];
+    return @[@"loaded",@"config",@"connect",@"window",@"root",@"no-root",@"no-scene",@"error",@"tablet",@"phone-scene-requested",@"phone-scene-error"];
 }
 static NSString *CTClientStatusName(NSString *bundle){return [@"com.sushibta.connectta.client." stringByAppendingString:bundle];}
 static NSMutableDictionary<NSString *,NSNumber *> *gClientObservers;
@@ -129,7 +130,12 @@ static void CTObserveClients(void){
         uint32_t result=notify_register_dispatch(CTClientStatusName(bundle).UTF8String,&token,dispatch_get_main_queue(),^(int t){
             uint64_t state=0;notify_get_state(t,&state);
             NSArray *stages=CTClientStages();
-            CTLog(@"[CLIENT] bundle=%@ stage=%@",bundle,(state>0 && state<=stages.count)?stages[state-1]:@"not-loaded");
+            NSUInteger code=(NSUInteger)(state&0xff);
+            NSString *stage=(code>0 && code<=stages.count)?stages[code-1]:@"not-loaded";
+            if(state>>8){
+                NSUInteger carWindows=(state>>8)&0xff,carRoots=(state>>16)&0xff,phoneRoots=(state>>24)&0xff,connected=(state>>32)&0xff;
+                CTLog(@"[CLIENT] bundle=%@ stage=%@ metrics carWindows=%lu carRoots=%lu phoneRoots=%lu connectedScenes=%lu",bundle,stage,(unsigned long)carWindows,(unsigned long)carRoots,(unsigned long)phoneRoots,(unsigned long)connected);
+            }else CTLog(@"[CLIENT] bundle=%@ stage=%@",bundle,stage);
         });
         if(result==NOTIFY_STATUS_OK){
             gClientObservers[bundle]=@(token);
@@ -139,12 +145,15 @@ static void CTObserveClients(void){
         }
     }
 }
-static void CTAppStage(const char *stage){
-    static int token=-1;
+static int gAppStatusToken=-1;
+static void CTAppPublishState(uint64_t state){
     NSString *status=CTClientStatusName(NSBundle.mainBundle.bundleIdentifier);
-    if(token<0 && notify_register_check(status.UTF8String,&token)!=NOTIFY_STATUS_OK){token=-1;return;}
+    if(gAppStatusToken<0 && notify_register_check(status.UTF8String,&gAppStatusToken)!=NOTIFY_STATUS_OK){gAppStatusToken=-1;return;}
+    notify_set_state(gAppStatusToken,state);notify_post(status.UTF8String);
+}
+static void CTAppStage(const char *stage){
     NSUInteger index=[CTClientStages() indexOfObject:[NSString stringWithUTF8String:stage]];
-    if(index!=NSNotFound){notify_set_state(token,index+1);notify_post(status.UTF8String);}
+    if(index!=NSNotFound)CTAppPublishState(index+1);
 }
 // Lay out the live app at tablet width before mapping its coordinates to CarPlay.
 // UIKit performs inverse coordinate conversion for gestures in the transformed canvas.
@@ -273,6 +282,44 @@ static BOOL CTAppCarSession(UISceneSession *session){
 static BOOL CTAppCarScene(UIScene *scene){
     return [scene isKindOfClass:UIWindowScene.class] && (CTAppCarSession(scene.session)||((UIWindowScene*)scene).screen!=UIScreen.mainScreen);
 }
+static void CTAppStageDetailed(const char *stage){
+    NSUInteger index=[CTClientStages() indexOfObject:[NSString stringWithUTF8String:stage]];
+    if(index==NSNotFound)return;
+    UIWindowScene *car=nil;
+    for(UIScene *scene in UIApplication.sharedApplication.connectedScenes){
+        if(CTAppCarScene(scene)){car=(UIWindowScene*)scene;break;}
+    }
+    NSUInteger carWindows=car?car.windows.count:0,carRoots=0,phoneRoots=0,connected=UIApplication.sharedApplication.connectedScenes.count;
+    for(UIWindow *window in car.windows){
+        if(window!=gAppCarWindow && window.rootViewController && window.windowLevel==UIWindowLevelNormal)carRoots++;
+    }
+    NSMutableOrderedSet *windows=[NSMutableOrderedSet orderedSetWithArray:UIApplication.sharedApplication.windows?:@[]];
+    for(UIScene *scene in UIApplication.sharedApplication.connectedScenes){
+        if([scene isKindOfClass:UIWindowScene.class] && !CTAppCarScene(scene))[windows addObjectsFromArray:((UIWindowScene*)scene).windows];
+    }
+    id delegateWindow=CTV(UIApplication.sharedApplication.delegate,@"window");
+    if([delegateWindow isKindOfClass:UIWindow.class] && ![windows containsObject:delegateWindow])[windows addObject:delegateWindow];
+    for(UIWindow *window in windows){
+        if(window==gAppCarWindow || window.screen!=UIScreen.mainScreen || !window.rootViewController || window.windowLevel!=UIWindowLevelNormal || CTAppCarScene(window.windowScene))continue;
+        phoneRoots++;
+    }
+    uint64_t state=(uint64_t)(index+1)&0xff;
+    state|=((uint64_t)MIN(carWindows,255)&0xff)<<8;
+    state|=((uint64_t)MIN(carRoots,255)&0xff)<<16;
+    state|=((uint64_t)MIN(phoneRoots,255)&0xff)<<24;
+    state|=((uint64_t)MIN(connected,255)&0xff)<<32;
+    CTAppPublishState(state);
+}
+static void CTRequestPhoneScene(NSUInteger attempt){
+    if(gYouTubeLayout || attempt!=2 || gPhoneSceneRequested)return;
+    gPhoneSceneRequested=YES;
+    CTAppStage("phone-scene-requested");
+    CTLog(@"[CLIENT-SCENE-REQUEST] no app window found; asking UIKit for an application scene");
+    [UIApplication.sharedApplication requestSceneSessionActivation:nil userActivity:nil options:nil errorHandler:^(NSError *error){
+        CTLog(@"[CLIENT-SCENE-REQUEST] failed: %@",error);
+        CTAppStage("phone-scene-error");
+    }];
+}
 static void CTAppRestore(void){
     gAppEpoch++;gAppPumpRunning=NO;
     if(gMovedRoot){
@@ -281,7 +328,7 @@ static void CTAppRestore(void){
         gTabletContainer=nil;
         if(gDonorWindow && gDonorWindow.rootViewController==gDonorPlaceholder)gDonorWindow.rootViewController=gMovedRoot;
     }
-    gAppCarWindow.hidden=YES;gAppCarWindow=nil;gDonorWindow=nil;gMovedRoot=nil;gDonorPlaceholder=nil;
+    gAppCarWindow.hidden=YES;gAppCarWindow=nil;gDonorWindow=nil;gMovedRoot=nil;gDonorPlaceholder=nil;gAppUsesNativeCarSceneRoot=NO;gPhoneSceneRequested=NO;
 }
 static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
     if(epoch!=gAppEpoch)return;
@@ -290,6 +337,19 @@ static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
         for(UIScene *scene in UIApplication.sharedApplication.connectedScenes)if(CTAppCarScene(scene)){car=(UIWindowScene*)scene;break;}
         // Connection/activation notifications restart discovery when CarPlay appears.
         if(!car){gAppPumpRunning=NO;return;}
+        // Let non-YouTube apps build their own UI in the remapped application scene.
+        // This preserves the app's own scene delegate instead of requiring a phone-window donor.
+        if(!gYouTubeLayout && !gAppUsesNativeCarSceneRoot){
+            for(UIWindow *window in car.windows){
+                if(window==gAppCarWindow || !window.rootViewController || window.windowLevel!=UIWindowLevelNormal)continue;
+                if(gAppCarWindow){gAppCarWindow.hidden=YES;gAppCarWindow=nil;}
+                gAppCarWindow=window;gAppUsesNativeCarSceneRoot=YES;
+                [gAppCarWindow makeKeyAndVisible];
+                CTAppStage("window");CTAppStage("root");
+                CTLog(@"[CLIENT-NATIVE-ROOT] app=%@ class=%@ scene=%@",NSBundle.mainBundle.bundleIdentifier,NSStringFromClass(gAppCarWindow.rootViewController.class),car.session.persistentIdentifier);
+                gAppPumpRunning=NO;return;
+            }
+        }
         if(car && !gAppCarWindow){
             gAppCarWindow=[[UIWindow alloc]initWithWindowScene:car];
             gAppCarWindow.frame=(CGRect){CGPointZero,car.coordinateSpace.bounds.size};
@@ -323,13 +383,13 @@ static void CTAppPump(NSUInteger attempt,NSUInteger epoch){
                 [gTabletContainer.view setNeedsLayout];[gTabletContainer.view layoutIfNeeded];
                 [gAppCarWindow makeKeyAndVisible];CTAppStage("root");
                 CTLog(@"[CLIENT-ROOT] class=%@ frame=%@ scene=%@",NSStringFromClass(gMovedRoot.class),NSStringFromCGRect(gMovedRoot.view.frame),car.session.persistentIdentifier);
-            }
+            }else CTRequestPhoneScene(attempt);
         }
     }@catch(NSException *e){CTAppStage("error");CTLog(@"[CLIENT-ERROR] %@ %@",e.name,e.reason);}
     if(!gMovedRoot && attempt<40){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{CTAppPump(attempt+1,epoch);});}
-    else{gAppPumpRunning=NO;if(!gMovedRoot)CTAppStage(gAppCarWindow?"no-root":"no-scene");}
+    else{gAppPumpRunning=NO;if(!gMovedRoot){if(gAppCarWindow)CTAppStageDetailed("no-root");else CTAppStage("no-scene");}}
 }
-static void CTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot)return;gAppPumpRunning=YES;CTAppPump(0,gAppEpoch);});}
+static void CTAppStart(void){dispatch_async(dispatch_get_main_queue(),^{if(gAppPumpRunning||gMovedRoot||gAppUsesNativeCarSceneRoot)return;gAppPumpRunning=YES;CTAppPump(0,gAppEpoch);});}
 static void CTAppResizeScene(UIWindowScene *scene){
     if(!gAppCarWindow || gAppCarWindow.windowScene!=scene)return;
     CGRect bounds=(CGRect){CGPointZero,scene.coordinateSpace.bounds.size};
@@ -364,8 +424,18 @@ static id CTHybridSessionRole(id self,SEL cmd){NSString *role=((id(*)(id,SEL))ct
 static BOOL CTHybridSupportsMulti(id self,SEL cmd){(void)self;(void)cmd;return YES;}
 static UISceneConfiguration *CTDelegateConfig(id self,SEL cmd,UIApplication *app,UISceneSession *session,UISceneConnectionOptions *options){
     if(CTAppCarSession(session)){
-        UISceneConfiguration *config=[[UISceneConfiguration alloc]initWithName:nil sessionRole:UIWindowSceneSessionRoleApplication];
-        config.sceneClass=UIWindowScene.class;config.delegateClass=CTAppCarSceneDelegate.class;CTAppStage("config");return config;
+        UISceneConfiguration *config=nil;
+        if(gYouTubeLayout){
+            config=[[UISceneConfiguration alloc]initWithName:nil sessionRole:UIWindowSceneSessionRoleApplication];
+            config.delegateClass=CTAppCarSceneDelegate.class;
+        }else if(ctOrigDelegateConfig){
+            @try{config=((id(*)(id,SEL,id,id,id))ctOrigDelegateConfig)(self,cmd,app,session,options);}
+            @catch(NSException *e){CTLog(@"[CLIENT-CONFIG-ERROR] %@ %@",e.name,e.reason);}
+        }
+        if(!config)config=[[UISceneConfiguration alloc]initWithName:nil sessionRole:UIWindowSceneSessionRoleApplication];
+        config.sceneClass=UIWindowScene.class;
+        CTLog(@"[CLIENT-CONFIG] app=%@ scene=%@ delegate=%@",NSBundle.mainBundle.bundleIdentifier,NSStringFromClass(config.sceneClass),config.delegateClass?NSStringFromClass(config.delegateClass):@"(app default)");
+        CTAppStage("config");return config;
     }
     if(ctOrigDelegateConfig)return ((id(*)(id,SEL,id,id,id))ctOrigDelegateConfig)(self,cmd,app,session,options);
     return session.configuration;
@@ -373,20 +443,20 @@ static UISceneConfiguration *CTDelegateConfig(id self,SEL cmd,UIApplication *app
 static void CTInstallDelegate(id delegate){
     if(!delegate||gPatchedDelegateClass)return;
     Class cls=object_getClass(delegate);SEL sel=@selector(application:configurationForConnectingSceneSession:options:);
-    Method method=class_getInstanceMethod(cls,sel);ctOrigDelegateConfig=method?method_getImplementation(method):NULL;
-    const char *types=method?method_getTypeEncoding(method):"@@:@@@";
-    class_replaceMethod(cls,sel,(IMP)CTDelegateConfig,types);gPatchedDelegateClass=cls;
+    if(!class_getInstanceMethod(cls,sel))return;
+    MSHookMessageEx(cls,sel,(IMP)CTDelegateConfig,(IMP *)&ctOrigDelegateConfig);
+    gPatchedDelegateClass=cls;
 }
 static void CTSetDelegate(id self,SEL cmd,id delegate){CTInstallDelegate(delegate);((void(*)(id,SEL,id))ctOrigSetDelegate)(self,cmd,delegate);}
 static void CTHybridInstallAppBridge(void){
     Method m=class_getInstanceMethod(UISceneConfiguration.class,@selector(initWithName:sessionRole:));
-    if(m){ctOrigSceneConfigInit=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSceneConfigInit);}
+    if(m){MSHookMessageEx(UISceneConfiguration.class,@selector(initWithName:sessionRole:),(IMP)CTHybridSceneConfigInit,(IMP *)&ctOrigSceneConfigInit);}
     m=class_getInstanceMethod(UISceneSession.class,@selector(role));
-    if(m){ctOrigSessionRole=method_getImplementation(m);method_setImplementation(m,(IMP)CTHybridSessionRole);}
+    if(m){MSHookMessageEx(UISceneSession.class,@selector(role),(IMP)CTHybridSessionRole,(IMP *)&ctOrigSessionRole);}
     Class manifest=NSClassFromString(@"UIApplicationSceneManifest");m=manifest?class_getInstanceMethod(manifest,NSSelectorFromString(@"supportsMultipleScenes")):NULL;
-    if(m){method_setImplementation(m,(IMP)CTHybridSupportsMulti);}
+    if(m){MSHookMessageEx(manifest,NSSelectorFromString(@"supportsMultipleScenes"),(IMP)CTHybridSupportsMulti,NULL);}
     m=class_getInstanceMethod(UIApplication.class,@selector(setDelegate:));
-    if(m){ctOrigSetDelegate=method_getImplementation(m);method_setImplementation(m,(IMP)CTSetDelegate);}
+    if(m){MSHookMessageEx(UIApplication.class,@selector(setDelegate:),(IMP)CTSetDelegate,(IMP *)&ctOrigSetDelegate);}
     CTInstallDelegate(UIApplication.sharedApplication.delegate);
     for(NSString *name in @[UISceneWillConnectNotification,UISceneDidActivateNotification,UIApplicationDidBecomeActiveNotification]){
         [[NSNotificationCenter defaultCenter]addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note){CTAppStart();}];

@@ -26,5 +26,16 @@ assert 'notify_register_dispatch(CTPreferencesChanged' in source
 assert 'com.apple.UIKit' in (root / 'ConnectTA.plist').read_text()
 assert 'SUBPROJECTS += prefs' in (root / 'Makefile').read_text()
 assert 'preferenceloader' in (root / 'control').read_text()
-print('PASS: package plists, shared preferences, per-app gating, YouTube-only layout, legacy removal')
-
+assert 'MSHookMessageEx' in source
+assert 'method_setImplementation' not in source
+assert 'class_replaceMethod' not in source
+assert 'CTInstallAppClientObserver' not in source
+assert 'requestSceneSessionActivation:nil' in source
+assert 'attempt!=2' in source
+assert 'gYouTubeLayout || attempt!=2' in source
+assert 'CLIENT-NATIVE-ROOT' in source
+assert 'config.delegateClass=CTAppCarSceneDelegate.class;' in source
+assert 'CONNECTTA-0.4.5' in source
+assert 'CTAppStageDetailed("no-root")' in source
+assert 'connectedScenes=%lu' in source
+print('PASS: package plists, shared preferences, chained ObjC hooks, YouTube-only layout, host no-root diagnostics, gated phone-scene request')
