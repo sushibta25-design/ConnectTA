@@ -1,20 +1,20 @@
 # ConnectTA
 
-Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarPlay. Gói 0.4.0 dành cho Dopamine rootless, arm64/arm64e, iOS 15 trở lên; chưa xác nhận RootHide.
+Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarPlay. Gói 0.4.1 dành cho Dopamine rootless, arm64/arm64e, iOS 15 trở lên; chưa xác nhận RootHide.
 
 ## Chức năng giữ lại
 
 - Icon app trên Home CarPlay và mở trực tiếp app đã bật.
-- Danh sách bật/tắt trong Cài đặt → ConnectTA; mặc định YouTube ON.
+- Danh sách bật/tắt trong Cài đặt → ConnectTA; mặc định YouTube ON. ON bật bridge; OFF giữ giao diện CarPlay gốc. Tiến trình app nhận thay đổi qua Darwin notification, không cần respring.
 - Chuyển root controller sang scene CarPlay và trả về khi ngắt kết nối.
 - Bố cục YouTube tablet 1024 điểm từ nền 91; app khác dùng kích thước vùng CarPlay.
 - Căn khung, safe area, admission và truyền cấu hình giữa tiến trình.
 
 ## Nâng cấp
 
-Ngắt CarPlay, cài DEB, respring và đóng/mở lại app được bridge. Gói ConnectTA thay thế gói com.sushibta.minita để tránh nạp hai dylib. Cấu hình mới dùng com.sushibta.connectta; nếu chưa lưu cấu hình mới sẽ đọc lựa chọn cũ. Mảng rỗng vẫn nghĩa là OFF toàn bộ. Tên cũ chỉ còn ở phần tương thích nâng cấp.
+Ngắt CarPlay, cài DEB, respring một lần sau nâng cấp và kết nối lại. Khi đổi công tắc, chỉ cần ngắt rồi kết nối lại CarPlay; không cần respring. Gói ConnectTA thay thế gói com.sushibta.minita để tránh nạp hai dylib. Cấu hình mới dùng com.sushibta.connectta; nếu chưa lưu cấu hình mới sẽ đọc lựa chọn cũ. Mảng rỗng vẫn nghĩa là OFF toàn bộ. Tên cũ chỉ còn ở phần tương thích nâng cấp.
 
-TAsmart/A510 hiện để OFF để giữ đường CarPlay đang hoạt động. Không bật cùng app trong hai tweak bridge. Không khẳng định mọi app đều tương thích.
+TAsmart/A510 hiện để OFF để giữ đường CarPlay đang hoạt động. Không bật cùng app trong hai tweak bridge. Maps/VietmapLive được giữ OFF để dùng giao diện CarPlay gốc; log 0.4.0 mới nhất cho thấy khi ON, hai app chỉ đến bước cấu hình scene và không kết nối scene giao diện. Zalo tạo được scene nhưng vẫn yêu cầu mở trên iPhone. Những app này cần xử lý tương thích riêng; không khẳng định mọi app đều tương thích.
 
 ## Phạm vi
 
@@ -26,7 +26,7 @@ Bản này không sửa lỗi phát tiếp sau camera lùi. Căn khung với b�
 
 Log giới hạn khoảng 1 MiB/file: /var/mobile/ConnectTA.txt, /var/mobile/ConnectTA-admission.txt và Documents/ConnectTA-client.txt trong app. Giữ lỗi và các mốc lifecycle; bỏ log resize liên tục, NSLog trùng và kênh client80 cũ. Không thêm polling thường trực.
 
-Build: Theos + iPhoneOS SDK; make clean package FINALPACKAGE=1. GitHub Actions build main, artifact ConnectTA-0.4.0-ROOTLESS. CI chỉ kiểm tra build và cấu hình; cần thử icon, ON/OFF, fullscreen, reconnect và phối hợp chia màn trên máy thật.
+Build: Theos + iPhoneOS SDK; make clean package FINALPACKAGE=1. GitHub Actions build main, artifact ConnectTA-0.4.1-ROOTLESS. CI chỉ kiểm tra build và cấu hình; cần thử icon, ON/OFF, fullscreen, reconnect và phối hợp chia màn trên máy thật.
 
 ## Mốc khôi phục
 
