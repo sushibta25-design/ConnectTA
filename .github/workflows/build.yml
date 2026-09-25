@@ -20,10 +20,22 @@ jobs:
           tar -xf /tmp/sdk.tar.xz -C $HOME/theos/sdks
       - name: Validate configuration
         run: python3 tests/check_config.py
-      - run: make clean package FINALPACKAGE=1
+      - name: Build rootless package
+        run: make clean package FINALPACKAGE=1
+      # Rootful jailbreaks (palera1n rootful, checkra1n, unc0ver) install to /
+      # and only resolve dependencies for the iphoneos-arm architecture.
+      - name: Build rootful package
+        run: |
+          sed -i '' 's/^Architecture: .*/Architecture: iphoneos-arm/' control
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=
       - uses: actions/upload-artifact@v4
         with:
           name: ConnectTA-0.4.0-ROOTLESS
-          path: packages/*.deb
+          path: packages/*_iphoneos-arm64.deb
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ConnectTA-0.4.0-ROOTFUL
+          path: packages/*_iphoneos-arm.deb
           if-no-files-found: error
 

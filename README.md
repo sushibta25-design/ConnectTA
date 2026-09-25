@@ -1,6 +1,6 @@
 # ConnectTA
 
-Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarPlay. Gói 0.4.0 dành cho Dopamine rootless, arm64/arm64e, iOS 15 trở lên; chưa xác nhận RootHide.
+Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarPlay. Gói 0.4.0, arm64/arm64e, iOS 15 trở lên, có hai bản: ROOTLESS (Dopamine, `iphoneos-arm64`) và ROOTFUL (palera1n rootful, checkra1n…, `iphoneos-arm`); chưa xác nhận RootHide.
 
 ## Chức năng giữ lại
 
