@@ -22,12 +22,13 @@ jobs:
         run: python3 tests/check_config.py
       - name: Build rootless package
         run: make clean package FINALPACKAGE=1
-      # Rootful jailbreaks (palera1n rootful, checkra1n, unc0ver) install to /
-      # and only resolve dependencies for the iphoneos-arm architecture.
+      # Rootful jailbreaks (Taurine on iOS 14, palera1n rootful, checkra1n)
+      # install to / and only resolve dependencies for iphoneos-arm. Taurine
+      # tops out at iOS 14.8.1, so this package targets iOS 14.0 and later.
       - name: Build rootful package
         run: |
           sed -i '' 's/^Architecture: .*/Architecture: iphoneos-arm/' control
-          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME= TARGET=iphone:clang:latest:14.0
       - uses: actions/upload-artifact@v4
         with:
           name: ConnectTA-0.4.0-ROOTLESS
