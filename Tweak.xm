@@ -665,6 +665,14 @@ static void CTAlignNativeHost(id controller){
         %init;
         [[NSFileManager defaultManager]removeItemAtPath:@"/var/mobile/ConnectTA.txt" error:nil];
         CTLog(@"[DIRECT-BOOT] native Home icon launch; no automatic Maps launch or overlay host");
+        // iOS 14 (Taurine) diagnostics: which Home classes and initializers exist.
+        CTLog(@"[DIAG] os=%@ enabled=%@",UIDevice.currentDevice.systemVersion,CTEnabledIdentifiers());
+        for(NSString *name in @[@"DBDashboardHomeViewController",@"DBIconLayoutVehicleDataProvider",@"DBIconModel",@"DBLeafIcon",@"DBApplicationInfo",@"DBApplicationSceneViewController",@"DBDashboard",@"DBSceneUpdate",@"CRCarPlayAppPolicyEvaluator",@"CRCarPlayAppDeclaration",@"LSApplicationProxy"])
+            CTLog(@"[DIAG] class %@ present=%d",name,NSClassFromString(name)!=nil);
+        CTLog(@"[DIAG] DBApplicationInfo initWithApplicationProxy:=%d DBLeafIcon initWithApplicationInfo:=%d home allApplicationIcons=%d",
+              [NSClassFromString(@"DBApplicationInfo") instancesRespondToSelector:NSSelectorFromString(@"initWithApplicationProxy:")],
+              [NSClassFromString(@"DBLeafIcon") instancesRespondToSelector:NSSelectorFromString(@"initWithApplicationInfo:")],
+              [NSClassFromString(@"DBDashboardHomeViewController") instancesRespondToSelector:NSSelectorFromString(@"allApplicationIcons")]);
         CTObserveClients();
         CTHybridInstallAdmission();
 
