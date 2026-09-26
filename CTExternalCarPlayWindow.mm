@@ -2,8 +2,15 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <dlfcn.h>
-#import <AVFoundation/AVFoundation.h>
 
+static void CTWindowLog(NSString *message) {
+    NSString *line=[NSString stringWithFormat:@"[ConnectTA-0.4.6-host pid=%d] %@\n",NSProcessInfo.processInfo.processIdentifier,message];
+    NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
+    NSFileHandle *file=[NSFileHandle fileHandleForWritingAtPath:@"/var/mobile/ConnectTA.txt"];
+    if (!file) { [data writeToFile:@"/var/mobile/ConnectTA.txt" atomically:YES]; return; }
+    @try { [file seekToEndOfFile]; [file writeData:data]; } @catch (__unused NSException *exception) {}
+    [file closeFile];
+}
 static id CTKVC(id object, NSString *key) {
     @try { return [object valueForKey:key]; }
     @catch (__unused NSException *exception) { return nil; }
@@ -25,6 +32,12 @@ static id CTCall2(id object, NSString *selector, id a, id b) {
     SEL sel=NSSelectorFromString(selector);
     if (![object respondsToSelector:sel]) return nil;
     return ((id(*)(id,SEL,id,id))objc_msgSend)(object,sel,a,b);
+}
+static id CTCall2Bool(id object, NSString *selector, id a, BOOL b) {
+    if (!object) return nil;
+    SEL sel=NSSelectorFromString(selector);
+    if (![object respondsToSelector:sel]) return nil;
+    return ((id(*)(id,SEL,id,BOOL))objc_msgSend)(object,sel,a,b);
 }
 static id CTCall3(id object, NSString *selector, id a, id b, id c) {
     if (!object) return nil;
@@ -67,34 +80,34 @@ static id CTFindCarPlayDisplay(void) {
     if (!self) return nil;
     @try {
         id display=CTFindCarPlayDisplay();
-        if (!display) { NSLog(@"[ConnectTA-Host] no CarPlay display"); return nil; }
+        if (!display) { CTWindowLog(@"display-error no CarPlay display"); return nil; }
 
         id controller=CTCall0(objc_getClass("SBApplicationController"), @"sharedInstance");
         self.application=CTCall1(controller, @"applicationWithBundleIdentifier:", bundleIdentifier);
-        if (!self.application) { NSLog(@"[ConnectTA-Host] app not found %@",bundleIdentifier); return nil; }
+        if (!self.application) { CTWindowLog([NSString stringWithFormat:@"app-error not found bundle=%@",bundleIdentifier]); return nil; }
 
         Class displayConfigClass=objc_getClass("FBSDisplayConfiguration");
         id displayConfig=((id(*)(id,SEL,id,BOOL))objc_msgSend)([displayConfigClass alloc],NSSelectorFromString(@"initWithCADisplay:isMainDisplay:"),display,NO);
         Class windowClass=objc_getClass("UIRootSceneWindow");
         self.window=CTCall1([windowClass alloc], @"initWithDisplayConfiguration:", displayConfig);
-        if (!self.window) { NSLog(@"[ConnectTA-Host] UIRootSceneWindow unavailable"); return nil; }
+        if (!self.window) { CTWindowLog(@"window-error UIRootSceneWindow unavailable"); return nil; }
         self.window.layer.cornerRadius=13.0;
         self.window.layer.masksToBounds=YES;
 
         id manager=CTCall0(objc_getClass("SBSceneManagerCoordinator"), @"mainDisplaySceneManager");
         id layout=CTCall0(manager, @"_layoutStateManager");
         id mainIdentity=CTCall0(manager, @"displayIdentity");
-        id sceneIdentity=CTCall2(manager, @"_sceneIdentityForApplication:createPrimaryIfRequired:", self.application, @YES);
+        id sceneIdentity=CTCall2Bool(manager, @"_sceneIdentityForApplication:createPrimaryIfRequired:", self.application, YES);
         id request=CTCall3(objc_getClass("SBApplicationSceneHandleRequest"), @"defaultRequestForApplication:sceneIdentity:displayIdentity:", self.application, sceneIdentity, mainIdentity);
         id sceneHandle=CTCall1(manager, @"fetchOrCreateApplicationSceneHandleForRequest:", request);
         id entity=CTCall1([objc_getClass("SBDeviceApplicationSceneEntity") alloc], @"initWithApplicationSceneHandle:", sceneHandle);
         self.appViewController=CTCall2([objc_getClass("SBAppViewController") alloc], @"initWithIdentifier:andApplicationSceneEntity:", bundleIdentifier, entity);
-        if (!self.appViewController) { NSLog(@"[ConnectTA-Host] SBAppViewController unavailable for %@",bundleIdentifier); return nil; }
+        if (!self.appViewController) { CTWindowLog([NSString stringWithFormat:@"scene-error SBAppViewController unavailable bundle=%@",bundleIdentifier]); return nil; }
 
         CTCallBool1(self.appViewController, @"setIgnoresOcclusions:", NO);
         @try { [self.appViewController setValue:@2 forKey:@"_currentMode"]; } @catch (__unused NSException *exception) {}
         CTCall0(CTKVC(self.appViewController,@"_activationSettings"), @"clearActivationSettings");
-        id transaction=CTCall2(self.appViewController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", entity, @YES);
+        id transaction=CTCall2Bool(self.appViewController, @"_createSceneUpdateTransactionForApplicationSceneEntity:deliveringActions:", entity, YES);
         NSMutableArray *active=CTKVC(self.appViewController,@"_activeTransitions");
         if ([active isKindOfClass:NSMutableArray.class] && transaction) [active addObject:transaction];
         id begin=transaction;
@@ -106,7 +119,7 @@ static id CTFindCarPlayDisplay(void) {
         id appView=CTCall0(self.appViewController, @"appView");
         if (appView) ((void(*)(id,SEL,int,id,id))objc_msgSend)(appView,NSSelectorFromString(@"setDisplayMode:animationFactory:completion:"),4,animation,nil);
         UIView *content=CTCall0(self.appViewController,@"view");
-        if (!content) { NSLog(@"[ConnectTA-Host] app scene view missing %@",bundleIdentifier); return nil; }
+        if (!content) { CTWindowLog([NSString stringWithFormat:@"scene-error app view missing bundle=%@",bundleIdentifier]); return nil; }
         CGRect bounds=self.window.bounds;
         if (CGRectIsEmpty(bounds)) bounds=UIScreen.mainScreen.bounds;
         content.frame=bounds;
@@ -116,9 +129,9 @@ static id CTFindCarPlayDisplay(void) {
         self.window.alpha=0;
         self.window.hidden=NO;
         [UIView animateWithDuration:0.25 animations:^{ self.window.alpha=1; }];
-        NSLog(@"[ConnectTA-Host] attached %@ display=%@ frame=%@ layout=%@",bundleIdentifier,display,NSStringFromCGRect(bounds),layout);
+        CTWindowLog([NSString stringWithFormat:@"attached bundle=%@ frame=%@ layout=%@",bundleIdentifier,NSStringFromCGRect(bounds),layout]);
     } @catch (NSException *exception) {
-        NSLog(@"[ConnectTA-Host] failed %@: %@ %@",bundleIdentifier,exception.name,exception.reason);
+        CTWindowLog([NSString stringWithFormat:@"exception bundle=%@ %@ %@",bundleIdentifier,exception.name,exception.reason]);
         return nil;
     }
     return self;
@@ -129,12 +142,14 @@ static id CTFindCarPlayDisplay(void) {
             self.window.hidden=YES;
             CTCallInt1(self.appViewController,@"_setCurrentMode:",0);
             [CTCall0(self.appViewController,@"view") removeFromSuperview];
+            [self.window removeFromSuperview];
+            CTWindowLog(@"window dismissed and scene mode reset");
             self.window=nil;
             self.appViewController=nil;
             self.application=nil;
         }];
     } @catch (NSException *exception) {
-        NSLog(@"[ConnectTA-Host] dismiss failed %@ %@",exception.name,exception.reason);
+        CTWindowLog([NSString stringWithFormat:@"dismiss-exception %@ %@",exception.name,exception.reason]);
     }
 }
 @end
