@@ -9,10 +9,11 @@ static NSString *const CTHostLaunchNotification=@"com.sushibta.connectta.host.la
 static NSString *const CTHostBuild=@"0.4.6-host-prototype";
 static CTExternalCarPlayWindow *gCTExternalWindow=nil;
 static NSString *gCTExternalBundle=nil;
+static int gCTHostLaunchToken=-1;
 
 static BOOL CTHostEnabled(NSString *bundle) { return [bundle isKindOfClass:NSString.class] && [CTReadEnabledApps() containsObject:bundle]; }
 static void CTHostLog(NSString *message) {
-    NSString *line=[NSString stringWithFormat:@"[ConnectTA-%@ pid=%d] %@\n",CTHostBuild,NSProcessInfo.processInfo.processIdentifier,message];
+    NSString *line=[NSString stringWithFormat:@"[ConnectTA-%@ pid=%d] %@\\n",CTHostBuild,NSProcessInfo.processInfo.processIdentifier,message];
     NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
     @synchronized(NSFileManager.class) {
         NSFileHandle *file=[NSFileHandle fileHandleForWritingAtPath:@"/var/mobile/ConnectTA.txt"];
@@ -45,11 +46,10 @@ static void CTHostLaunch(NSString *bundle) {
 + (id)launchInfoForApplication:(id)application withActivationSettings:(id)settings {
     NSString *bundle=nil;
     @try { bundle=[application valueForKey:@"bundleIdentifier"]; } @catch (__unused NSException *exception) {}
-    // YouTube stays on its established tablet-scene path. Other enabled apps
-    // use the SpringBoard external-display scene host; OFF remains native.
+    // Intercept only Netflix when its ConnectTA toggle is ON.
     if ([bundle isEqualToString:@"com.netflix.Netflix"] && CTHostEnabled(bundle)) {
         CTHostLog([NSString stringWithFormat:@"intercept enabled app=%@",bundle]);
-        [[NSDistributedNotificationCenter defaultCenter] postNotificationName:CTHostLaunchNotification object:nil userInfo:@{@"bundle":bundle}];
+        notify_post(CTHostLaunchNotification.UTF8String);
         return nil;
     }
     return %orig;
@@ -60,9 +60,9 @@ static void CTHostLaunch(NSString *bundle) {
 %group CTSpringBoardHost
 %hook SpringBoard
 - (void)applicationDidFinishLaunching:(id)application {
-    [[NSDistributedNotificationCenter defaultCenter] addObserverForName:CTHostLaunchNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
-        CTHostLaunch(note.userInfo[@"bundle"]);
-    }];
+    notify_register_dispatch(CTHostLaunchNotification.UTF8String,&gCTHostLaunchToken,dispatch_get_main_queue(),^(__unused int changedToken) {
+        CTHostLaunch(@"com.netflix.Netflix");
+    });
     [[NSNotificationCenter defaultCenter] addObserverForName:@"CarPlayIsConnectedDidChange" object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
         id device=((id(*)(id,SEL))objc_msgSend)(objc_getClass("AVExternalDevice"),NSSelectorFromString(@"currentCarPlayExternalDevice"));
         if (!device) CTHostClose();
