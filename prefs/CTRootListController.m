@@ -43,7 +43,7 @@ static id CTValue(id object,NSString *key){
     // Retain switches for stored selections even if an app was uninstalled.
     for(NSString *identifier in CTReadEnabledApps())if(!apps[identifier])apps[identifier]=[identifier stringByAppendingString:@" (chưa tìm thấy)"];
     PSSpecifier *group=[PSSpecifier groupSpecifierWithName:@"Ứng dụng"];
-    [group setProperty:@"App OFF giữ hành vi CarPlay gốc. YouTube tiếp tục dùng đường ConnectTA đã chạy. App ON khác thử cơ chế SpringBoard đưa scene app lên màn hình CarPlay; đây là prototype, chưa xác nhận tương thích trên mọi iOS/app. Ngắt rồi kết nối lại CarPlay sau khi đổi." forKey:@"footerText"];
+    [group setProperty:@"Netflix ON thử cơ chế external-display mới; Netflix OFF đi theo đường hiện tại. YouTube, Maps, Vietmap, Zalo và các app khác không đổi ở bản này. Ngắt rồi kết nối lại CarPlay sau khi đổi." forKey:@"footerText"];
     [items addObject:group];
     NSArray *identifiers=[apps.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *a,NSString *b){return [apps[a] localizedCaseInsensitiveCompare:apps[b]];}];
     for(NSString *identifier in identifiers){
