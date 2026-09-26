@@ -20,7 +20,7 @@ static void CTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const CTBuild=@"CONNECTTA-0.4.0";
+static NSString *const CTBuild=@"CONNECTTA-0.4.6";
 static void CTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);
@@ -640,10 +640,12 @@ static void CTAlignNativeHost(id controller){
             if(![NSBundle.mainBundle.bundlePath.pathExtension isEqualToString:@"app"])return;
             gAppClient=YES;
             gYouTubeLayout=[bundle isEqualToString:@"com.google.ios.youtube"];
-            if(gYouTubeLayout){
-                %init(CTTabletIdentity);
+            if(!gYouTubeLayout){
+                CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ external-host path; app UIKit hooks skipped",bundle);
+                return;
             }
-            CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ tablet=%d",bundle,gYouTubeLayout);
+            %init(CTTabletIdentity);
+            CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ tablet=1",bundle);
             CTHybridInstallAppBridge();return;
         }
         BOOL car=[bundle isEqualToString:@"com.apple.CarPlayApp"];
