@@ -10,7 +10,7 @@ static NSString *const CTHostBuild=@"0.4.6-host-prototype";
 static CTExternalCarPlayWindow *gCTExternalWindow=nil;
 static NSString *gCTExternalBundle=nil;
 
-static BOOL CTHostEnabled(NSString *bundle) { return [CTReadEnabledApps() containsObject:bundle]; }
+static BOOL CTHostEnabled(NSString *bundle) { return [bundle isKindOfClass:NSString.class] && [CTReadEnabledApps() containsObject:bundle]; }
 static void CTHostLog(NSString *message) {
     NSString *line=[NSString stringWithFormat:@"[ConnectTA-%@ pid=%d] %@\n",CTHostBuild,NSProcessInfo.processInfo.processIdentifier,message];
     NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
