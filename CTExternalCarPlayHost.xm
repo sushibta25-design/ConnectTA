@@ -77,7 +77,7 @@ static void CTInstallSpringBoardObservers(void) {
 %ctor {
     @autoreleasepool {
         NSString *bundle=NSBundle.mainBundle.bundleIdentifier;
-        if ([bundle isEqualToString:@"com.apple.CarPlayApp"]) %init(CTCarPlayLaunch);
+        if ([bundle isEqualToString:@"com.apple.CarPlayApp"] && CTNetflixEnabled()) %init(CTCarPlayLaunch);
         else if ([bundle isEqualToString:@"com.apple.springboard"] && CTNetflixEnabled()) CTInstallSpringBoardObservers();
     }
 }

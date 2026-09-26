@@ -36,6 +36,7 @@ assert 'com.apple.CarPlayApp' in netflix_filter and 'com.apple.springboard' in n
 assert '[bundle isEqualToString:CTNetflixBundle] && CTNetflixEnabled()' in host
 assert '%hook SpringBoard' not in host
 assert '&& CTNetflixEnabled()) CTInstallSpringBoardObservers();' in host
+assert '&& CTNetflixEnabled()) %init(CTCarPlayLaunch);' in host
 assert 'CTExternalCarPlayHost' not in source
 assert 'com.google.ios.youtube' not in host
 assert 'com.netflix.Netflix' in host
