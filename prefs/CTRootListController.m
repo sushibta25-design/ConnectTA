@@ -18,7 +18,7 @@ static id CTValue(id object,NSString *key){
 - (NSMutableArray *)specifiers {
     if(_specifiers)return _specifiers;
     NSMutableArray *items=[NSMutableArray array];
-    PSSpecifier *intro=[PSSpecifier groupSpecifierWithName:@"ConnectTA 0.4.6 • Rootless"];
+    PSSpecifier *intro=[PSSpecifier groupSpecifierWithName:@"ConnectTA 0.4.7 • Rootless"];
     [intro setProperty:@"Bật app để đưa giao diện iPhone lên CarPlay. Ngắt CarPlay trước khi đổi. Sau đó đóng hẳn và mở lại app trên iPhone, respring rồi kết nối lại CarPlay. Tắt CarBridge cho cùng app. Chỉ dùng video khi xe đỗ." forKey:@"footerText"];
     [items addObject:intro];
     PSSpecifier *reset=[PSSpecifier preferenceSpecifierNamed:@"Tắt toàn bộ App Bridge" target:self set:NULL get:NULL detail:Nil cell:PSButtonCell edit:Nil];
