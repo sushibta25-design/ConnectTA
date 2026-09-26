@@ -29,10 +29,11 @@ assert 'com.apple.UIKit' in (root / 'ConnectTA.plist').read_text()
 assert 'SUBPROJECTS += prefs' in (root / 'Makefile').read_text()
 assert 'preferenceloader' in (root / 'control').read_text()
 assert 'CTExternalCarPlayHost.xm CTExternalCarPlayWindow.mm' in (root / 'Makefile').read_text()
-assert 'CTHostEnabled(bundle)' in host
-assert 'com.google.ios.youtube' in host
+assert '[bundle isEqualToString:@"com.netflix.Netflix"] && CTHostEnabled(bundle)' in host
+assert 'com.google.ios.youtube' not in host
+assert 'com.netflix.Netflix' in host
 assert 'requestSceneSessionActivation' not in source
-assert 'app UIKit hooks skipped' in source
+assert 'CTHybridInstallAppBridge();return;' in source
 assert 'UIRootSceneWindow' in window
 assert 'SBAppViewController' in window
 print('PASS: package plists, shared preferences, preserved YouTube path, gated SpringBoard scene-host prototype')
