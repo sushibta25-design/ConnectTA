@@ -20,7 +20,7 @@ static void CTReloadConfiguration(void){
     @synchronized(NSProcessInfo.processInfo){gEnabledApps=apps;}
 }
 
-static NSString *const CTBuild=@"CONNECTTA-0.4.0";
+static NSString *const CTBuild=@"CONNECTTA-0.4.7";
 static void CTLog(NSString *format,...){
     va_list args;va_start(args,format);
     NSString *message=[[NSString alloc]initWithFormat:format arguments:args];va_end(args);

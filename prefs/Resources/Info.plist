@@ -5,8 +5,8 @@
 <key>CFBundleName</key><string>ConnectTAPrefs</string>
 <key>CFBundleExecutable</key><string>ConnectTAPrefs</string>
 <key>CFBundlePackageType</key><string>BNDL</string>
-<key>CFBundleVersion</key><string>100</string>
-<key>CFBundleShortVersionString</key><string>0.4.0</string>
+<key>CFBundleVersion</key><string>107</string>
+<key>CFBundleShortVersionString</key><string>0.4.7</string>
 <key>NSPrincipalClass</key><string>CTRootListController</string>
 </dict></plist>
 

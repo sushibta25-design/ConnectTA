@@ -1,6 +1,6 @@
 # ConnectTA
 
-Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarPlay. Gói 0.4.0, arm64/arm64e, iOS 15 trở lên, có hai bản: ROOTLESS (Dopamine, `iphoneos-arm64`) và ROOTFUL (palera1n rootful, checkra1n…, `iphoneos-arm`); chưa xác nhận RootHide.
+Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarPlay. Bản thử 0.4.7 lấy code từ commit `cd31233e6e0b64ce04548a6e065e59bcc5695ced`; phần chức năng ConnectTA giữ theo mốc đó. CI tạo riêng ROOTLESS (`iphoneos-arm64`), ROOTHIDE (`iphoneos-arm64e`) và ROOTFUL (`iphoneos-arm`). RootHide được build bằng Theos của RootHide; chạy trên thiết bị vẫn cần kiểm tra thực tế.
 
 ## Chức năng giữ lại
 
@@ -26,7 +26,7 @@ Bản này không sửa lỗi phát tiếp sau camera lùi. Căn khung với b�
 
 Log giới hạn khoảng 1 MiB/file: /var/mobile/ConnectTA.txt, /var/mobile/ConnectTA-admission.txt và Documents/ConnectTA-client.txt trong app. Giữ lỗi và các mốc lifecycle; bỏ log resize liên tục, NSLog trùng và kênh client80 cũ. Không thêm polling thường trực.
 
-Build: Theos + iPhoneOS SDK; make clean package FINALPACKAGE=1. GitHub Actions build main, artifact ConnectTA-0.4.0-ROOTLESS. CI chỉ kiểm tra build và cấu hình; cần thử icon, ON/OFF, fullscreen, reconnect và phối hợp chia màn trên máy thật.
+Build cục bộ: dùng Theos hỗ trợ RootHide và iPhoneOS SDK; chạy `make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless` hoặc `make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide`. GitHub Actions build cả ba gói trong một workflow run trên mỗi lần push `main`/PR vào `main`. Tải đúng artifact theo môi trường jailbreak. CI xác nhận compile và cấu hình đóng gói; chưa thay thế kiểm tra icon, ON/OFF, fullscreen và reconnect trên máy thật.
 
 ## Mốc khôi phục
 

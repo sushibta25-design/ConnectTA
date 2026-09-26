@@ -3,40 +3,57 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
+concurrency:
+  group: connectta-build-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: macos-14
+    env:
+      CONNECTTA_VERSION: 0.4.7
     steps:
       - uses: actions/checkout@v4
       - run: brew install ldid xz
-      - name: Install Theos
+      - name: Install RootHide-enabled Theos
         run: |
-          git clone --recursive https://github.com/theos/theos.git $HOME/theos
-          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          git clone --recursive https://github.com/roothide/theos.git "$RUNNER_TEMP/connectta-theos"
+          echo "THEOS=$RUNNER_TEMP/connectta-theos" >> "$GITHUB_ENV"
       - name: Install SDK
         run: |
-          mkdir -p $HOME/theos/sdks
-          curl -L -o /tmp/sdk.tar.xz https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
-          tar -xf /tmp/sdk.tar.xz -C $HOME/theos/sdks
+          mkdir -p "$RUNNER_TEMP/connectta-theos/sdks"
+          curl -fsSL -o "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
+          tar -xf "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" -C "$RUNNER_TEMP/connectta-theos/sdks"
       - name: Validate configuration
         run: python3 tests/check_config.py
       - name: Build rootless package
-        run: make clean package FINALPACKAGE=1
-      # Rootful jailbreaks (Taurine on iOS 14, palera1n rootful, checkra1n)
-      # install to / and only resolve dependencies for iphoneos-arm. Taurine
-      # tops out at iOS 14.8.1, so this package targets iOS 14.0 and later.
+        run: |
+          mkdir -p build-output
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+          cp packages/*.deb "build-output/ConnectTA-${CONNECTTA_VERSION}-ROOTLESS.deb"
+      - name: Build RootHide package
+        run: |
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+          cp packages/*.deb "build-output/ConnectTA-${CONNECTTA_VERSION}-ROOTHIDE.deb"
+      # Rootful jailbreaks (Taurine on iOS 14, palera1n rootful, checkra1n).
       - name: Build rootful package
         run: |
           sed -i '' 's/^Architecture: .*/Architecture: iphoneos-arm/' control
           make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME= TARGET=iphone:clang:latest:14.0
+          cp packages/*.deb "build-output/ConnectTA-${CONNECTTA_VERSION}-ROOTFUL.deb"
       - uses: actions/upload-artifact@v4
         with:
-          name: ConnectTA-0.4.0-ROOTLESS
-          path: packages/*_iphoneos-arm64.deb
+          name: ConnectTA-${{ env.CONNECTTA_VERSION }}-ROOTLESS
+          path: build-output/ConnectTA-${{ env.CONNECTTA_VERSION }}-ROOTLESS.deb
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: ConnectTA-0.4.0-ROOTFUL
-          path: packages/*_iphoneos-arm.deb
+          name: ConnectTA-${{ env.CONNECTTA_VERSION }}-ROOTHIDE
+          path: build-output/ConnectTA-${{ env.CONNECTTA_VERSION }}-ROOTHIDE.deb
           if-no-files-found: error
-
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ConnectTA-${{ env.CONNECTTA_VERSION }}-ROOTFUL
+          path: build-output/ConnectTA-${{ env.CONNECTTA_VERSION }}-ROOTFUL.deb
+          if-no-files-found: error

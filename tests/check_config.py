@@ -26,5 +26,11 @@ assert 'notify_register_dispatch(CTPreferencesChanged' in source
 assert 'com.apple.UIKit' in (root / 'ConnectTA.plist').read_text()
 assert 'SUBPROJECTS += prefs' in (root / 'Makefile').read_text()
 assert 'preferenceloader' in (root / 'control').read_text()
-print('PASS: package plists, shared preferences, per-app gating, YouTube-only layout, legacy removal')
+workflow = (root / '.github/workflows/build.yml').read_text()
+assert 'https://github.com/roothide/theos.git' in workflow
+assert 'THEOS_PACKAGE_SCHEME=roothide' in workflow
+for package in ('ROOTLESS', 'ROOTHIDE', 'ROOTFUL'):
+    assert f'ConnectTA-0.4.7-{package}.deb' in workflow
+
+print('PASS: package config, per-app gating, legacy removal, and all three jailbreak build artifacts')
 
