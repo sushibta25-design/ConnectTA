@@ -18,7 +18,7 @@ static id CTValue(id object,NSString *key){
 - (NSMutableArray *)specifiers {
     if(_specifiers)return _specifiers;
     NSMutableArray *items=[NSMutableArray array];
-    PSSpecifier *intro=[PSSpecifier groupSpecifierWithName:@"ConnectTA 0.4.0 • Rootless"];
+    PSSpecifier *intro=[PSSpecifier groupSpecifierWithName:@"ConnectTA 0.4.8 • Rootless"];
     [intro setProperty:@"Bật app để đưa giao diện iPhone lên CarPlay. Ngắt CarPlay trước khi đổi. Sau đó đóng hẳn và mở lại app trên iPhone, respring rồi kết nối lại CarPlay. Tắt CarBridge cho cùng app. Chỉ dùng video khi xe đỗ." forKey:@"footerText"];
     [items addObject:intro];
     PSSpecifier *reset=[PSSpecifier preferenceSpecifierNamed:@"Tắt toàn bộ App Bridge" target:self set:NULL get:NULL detail:Nil cell:PSButtonCell edit:Nil];
@@ -43,7 +43,7 @@ static id CTValue(id object,NSString *key){
     // Retain switches for stored selections even if an app was uninstalled.
     for(NSString *identifier in CTReadEnabledApps())if(!apps[identifier])apps[identifier]=[identifier stringByAppendingString:@" (chưa tìm thấy)"];
     PSSpecifier *group=[PSSpecifier groupSpecifierWithName:@"Ứng dụng"];
-    [group setProperty:@"App OFF giữ hành vi CarPlay gốc. Với Maps/Vietmap đã có CarPlay, chỉ bật nếu muốn thử giao diện iPhone thay cho giao diện CarPlay gốc. YouTube giữ bố cục tablet; các app khác dùng kích thước vùng CarPlay. Không đảm bảo mọi app tương thích. Nếu danh sách thiếu app, đóng và mở lại Cài đặt." forKey:@"footerText"];
+    [group setProperty:@"Netflix ON thử cơ chế external-display mới; Netflix OFF đi theo đường hiện tại. YouTube, Maps, Vietmap, Zalo và các app khác không đổi ở bản này. Ngắt rồi kết nối lại CarPlay sau khi đổi." forKey:@"footerText"];
     [items addObject:group];
     NSArray *identifiers=[apps.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *a,NSString *b){return [apps[a] localizedCaseInsensitiveCompare:apps[b]];}];
     for(NSString *identifier in identifiers){
