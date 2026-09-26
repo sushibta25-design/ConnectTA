@@ -6,8 +6,8 @@ Jailbreak app bridge đưa giao diện app iPhone được chọn lên Home CarP
 
 - Icon app trên Home CarPlay và mở trực tiếp app đã bật.
 - Danh sách bật/tắt trong Cài đặt → ConnectTA; mặc định YouTube ON.
-- YouTube giữ đường scene tablet đã chạy trong ConnectTA.
-- App ON khác thử cơ chế SpringBoard tạo scene app và cửa sổ trên màn hình CarPlay; OFF giữ đường CarPlay gốc.
+- Netflix ON thử cơ chế SpringBoard tạo scene app và cửa sổ trên màn hình CarPlay; Netflix OFF giữ đường hiện tại.
+- YouTube, Maps, Vietmap, Zalo và mọi app khác giữ nguyên đường xử lý 0.4.0.
 - Bố cục YouTube tablet 1024 điểm từ nền 91; app khác dùng kích thước vùng CarPlay.
 - Căn khung, safe area, admission và truyền cấu hình giữa tiến trình.
 
@@ -27,7 +27,7 @@ Bản này không sửa lỗi phát tiếp sau camera lùi. Căn khung với b�
 
 Log giới hạn khoảng 1 MiB/file: /var/mobile/ConnectTA.txt, /var/mobile/ConnectTA-admission.txt và Documents/ConnectTA-client.txt trong app. Giữ lỗi và các mốc lifecycle; bỏ log resize liên tục, NSLog trùng và kênh client80 cũ. Không thêm polling thường trực.
 
-Build: Theos + iPhoneOS SDK; make clean package FINALPACKAGE=1. Bản 0.4.6 là prototype port cơ chế external-display host từ mã CarPlayEnable trong ZIP do người dùng cung cấp. CI chỉ xác nhận biên dịch và cấu hình; cần thử riêng từng app ON/OFF trên máy thật. Nếu SpringBoard không tạo được scene, không kết luận tính năng đã hoạt động.
+Build: Theos + iPhoneOS SDK; make clean package FINALPACKAGE=1. Bản 0.4.6 chỉ thêm đường thử nghiệm cho Netflix dựa trên external-display host trong ZIP do người dùng cung cấp. CI chỉ xác nhận biên dịch và cấu hình; Netflix vẫn cần thử ON/OFF trên máy thật. Các app còn lại giữ nguyên code 0.4.0.
 
 ## Mốc khôi phục
 
