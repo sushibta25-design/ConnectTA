@@ -7,6 +7,8 @@ root = Path(__file__).resolve().parents[1]
 source = (root / 'Tweak.xm').read_text()
 config = (root / 'CTConfig.h').read_text()
 prefs = (root / 'prefs/CTRootListController.m').read_text()
+host = (root / 'CTExternalCarPlayHost.xm').read_text()
+window = (root / 'CTExternalCarPlayWindow.mm').read_text()
 for path in (root / 'prefs/Resources/Info.plist', root / 'layout/Library/PreferenceLoader/Preferences/ConnectTA.plist'):
     with path.open('rb') as stream:
         plistlib.load(stream)
@@ -26,5 +28,12 @@ assert 'notify_register_dispatch(CTPreferencesChanged' in source
 assert 'com.apple.UIKit' in (root / 'ConnectTA.plist').read_text()
 assert 'SUBPROJECTS += prefs' in (root / 'Makefile').read_text()
 assert 'preferenceloader' in (root / 'control').read_text()
-print('PASS: package plists, shared preferences, per-app gating, YouTube-only layout, legacy removal')
+assert 'CTExternalCarPlayHost.xm CTExternalCarPlayWindow.mm' in (root / 'Makefile').read_text()
+assert 'CTHostEnabled(bundle)' in host
+assert 'com.google.ios.youtube' in host
+assert 'requestSceneSessionActivation' not in source
+assert 'app UIKit hooks skipped' in source
+assert 'UIRootSceneWindow' in window
+assert 'SBAppViewController' in window
+print('PASS: package plists, shared preferences, preserved YouTube path, gated SpringBoard scene-host prototype')
 
