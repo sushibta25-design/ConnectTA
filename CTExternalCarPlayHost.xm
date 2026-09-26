@@ -5,14 +5,18 @@
 #import "CTConfig.h"
 #import "CTExternalCarPlayWindow.h"
 
-static NSString *const CTHostLaunchNotification=@"com.sushibta.connectta.host.launch";
-static NSString *const CTHostBuild=@"0.4.6-host-prototype";
+static NSString *const CTHostLaunchNotification=@"com.sushibta.connectta.netflix.host.launch";
+static NSString *const CTHostBuild=@"0.4.8-netflix-isolated";
+static NSString *const CTNetflixBundle=@"com.netflix.Netflix";
 static CTExternalCarPlayWindow *gCTExternalWindow=nil;
 static NSString *gCTExternalBundle=nil;
 static int gCTHostLaunchToken=-1;
 static int gCTPreferencesToken=-1;
+static BOOL gCTHostObserversInstalled=NO;
 
-static BOOL CTHostEnabled(NSString *bundle) { return [bundle isKindOfClass:NSString.class] && [CTReadEnabledApps() containsObject:bundle]; }
+static BOOL CTNetflixEnabled(void) {
+    return [CTReadEnabledApps() containsObject:CTNetflixBundle];
+}
 static void CTHostLog(NSString *message) {
     NSString *line=[NSString stringWithFormat:@"[ConnectTA-%@ pid=%d] %@\n",CTHostBuild,NSProcessInfo.processInfo.processIdentifier,message];
     NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
@@ -25,34 +29,33 @@ static void CTHostLog(NSString *message) {
 }
 static void CTHostClose(void) {
     if (gCTExternalWindow) [gCTExternalWindow dismiss];
-    CTHostLog([NSString stringWithFormat:@"host closed bundle=%@",gCTExternalBundle?:@"(none)"]);
     gCTExternalWindow=nil;
     gCTExternalBundle=nil;
+    CTHostLog(@"Netflix host closed");
 }
-static void CTHostLaunch(NSString *bundle) {
-    if (![bundle isKindOfClass:NSString.class] || ![bundle isEqualToString:@"com.netflix.Netflix"] || !CTHostEnabled(bundle)) {
-        CTHostLog([NSString stringWithFormat:@"host launch rejected bundle=%@ enabled=0",bundle]);
-        return;
-    }
+static void CTHostLaunch(void) {
+    if (!CTNetflixEnabled()) return;
     CTHostClose();
-    CTHostLog([NSString stringWithFormat:@"host launch requested bundle=%@",bundle]);
-    CTExternalCarPlayWindow *candidate=[[CTExternalCarPlayWindow alloc] initWithBundleIdentifier:bundle];
-    if (!candidate) { CTHostLog([NSString stringWithFormat:@"host create failed bundle=%@",bundle]); return; }
+    CTHostLog(@"Netflix external host requested");
+    CTExternalCarPlayWindow *candidate=[[CTExternalCarPlayWindow alloc] initWithBundleIdentifier:CTNetflixBundle];
+    if (!candidate) { CTHostLog(@"Netflix host create failed"); return; }
     gCTExternalWindow=candidate;
-    gCTExternalBundle=[bundle copy];
+    gCTExternalBundle=[CTNetflixBundle copy];
 }
 static void CTInstallSpringBoardObservers(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (gCTHostObserversInstalled) return;
+        gCTHostObserversInstalled=YES;
         notify_register_dispatch(CTHostLaunchNotification.UTF8String,&gCTHostLaunchToken,dispatch_get_main_queue(),^(__unused int changedToken) {
-            CTHostLaunch(@"com.netflix.Netflix");
+            CTHostLaunch();
+        });
+        notify_register_dispatch(CTPreferencesChanged,&gCTPreferencesToken,dispatch_get_main_queue(),^(__unused int changedToken) {
+            if (!CTNetflixEnabled()) CTHostClose();
         });
         [[NSNotificationCenter defaultCenter] addObserverForName:@"CarPlayIsConnectedDidChange" object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
             id device=((id(*)(id,SEL))objc_msgSend)(objc_getClass("AVExternalDevice"),NSSelectorFromString(@"currentCarPlayExternalDevice"));
             if (!device) CTHostClose();
         }];
-        notify_register_dispatch(CTPreferencesChanged,&gCTPreferencesToken,dispatch_get_main_queue(),^(__unused int changedToken) {
-            if (gCTExternalBundle && !CTHostEnabled(gCTExternalBundle)) CTHostClose();
-        });
     });
 }
 
@@ -61,9 +64,8 @@ static void CTInstallSpringBoardObservers(void) {
 + (id)launchInfoForApplication:(id)application withActivationSettings:(id)settings {
     NSString *bundle=nil;
     @try { bundle=[application valueForKey:@"bundleIdentifier"]; } @catch (__unused NSException *exception) {}
-    // Intercept only Netflix when its ConnectTA toggle is ON.
-    if ([bundle isEqualToString:@"com.netflix.Netflix"] && CTHostEnabled(bundle)) {
-        CTHostLog([NSString stringWithFormat:@"intercept enabled app=%@",bundle]);
+    if ([bundle isEqualToString:CTNetflixBundle] && CTNetflixEnabled()) {
+        CTHostLog(@"intercept enabled Netflix launch");
         notify_post(CTHostLaunchNotification.UTF8String);
         return nil;
     }
@@ -76,6 +78,6 @@ static void CTInstallSpringBoardObservers(void) {
     @autoreleasepool {
         NSString *bundle=NSBundle.mainBundle.bundleIdentifier;
         if ([bundle isEqualToString:@"com.apple.CarPlayApp"]) %init(CTCarPlayLaunch);
-        else if ([bundle isEqualToString:@"com.apple.springboard"]) CTInstallSpringBoardObservers();
+        else if ([bundle isEqualToString:@"com.apple.springboard"] && CTNetflixEnabled()) CTInstallSpringBoardObservers();
     }
 }
