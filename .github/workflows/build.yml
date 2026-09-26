@@ -7,10 +7,13 @@ on:
     branches: [ main ]
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - run: brew install ldid xz
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bash curl git ldid make perl xz-utils
       - name: Install Theos
         run: |
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
@@ -28,4 +31,3 @@ jobs:
           name: ConnectTA-0.4.6-ROOTLESS
           path: packages/*.deb
           if-no-files-found: error
-
