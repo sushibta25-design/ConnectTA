@@ -1,4 +1,7 @@
 name: Build ConnectTA App Bridge
+concurrency:
+  group: connectta-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 on:
   workflow_dispatch:
   pull_request:
@@ -30,6 +33,6 @@ jobs:
       - run: make clean package FINALPACKAGE=1
       - uses: actions/upload-artifact@v4
         with:
-          name: ConnectTA-0.4.7-ROOTLESS
+          name: ConnectTA-0.4.8-ROOTLESS
           path: packages/*.deb
           if-no-files-found: error

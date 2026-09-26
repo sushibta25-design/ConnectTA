@@ -1,6 +1,6 @@
 Package: com.sushibta.connectta
 Name: ConnectTA
-Version: 0.4.7
+Version: 0.4.8
 Architecture: iphoneos-arm64
 Description: ConnectTA app bridge for CarPlay with per-app selection.
 Maintainer: sushibta25-design
