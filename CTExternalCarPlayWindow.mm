@@ -1,6 +1,7 @@
 #import "CTExternalCarPlayWindow.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <dlfcn.h>
 #import <AVFoundation/AVFoundation.h>
 
 static id CTKVC(id object, NSString *key) {
@@ -42,6 +43,7 @@ static void CTCallInt1(id object, NSString *selector, int value) {
     if ([object respondsToSelector:sel]) ((void(*)(id,SEL,int))objc_msgSend)(object,sel,value);
 }
 static id CTFindCarPlayDisplay(void) {
+    dlopen("/System/Library/Frameworks/AVFoundation.framework/AVFoundation",RTLD_NOW|RTLD_GLOBAL);
     Class externalClass=objc_getClass("AVExternalDevice");
     id external=CTCall0(externalClass, @"currentCarPlayExternalDevice");
     NSArray *identifiers=CTCall0(external, @"screenIDs");
