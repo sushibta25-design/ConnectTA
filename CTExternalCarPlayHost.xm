@@ -28,7 +28,7 @@ static void CTHostClose(void) {
     gCTExternalBundle=nil;
 }
 static void CTHostLaunch(NSString *bundle) {
-    if (![bundle isKindOfClass:NSString.class] || !CTHostEnabled(bundle)) {
+    if (![bundle isKindOfClass:NSString.class] || ![bundle isEqualToString:@"com.netflix.Netflix"] || !CTHostEnabled(bundle)) {
         CTHostLog([NSString stringWithFormat:@"host launch rejected bundle=%@ enabled=0",bundle]);
         return;
     }
@@ -47,7 +47,7 @@ static void CTHostLaunch(NSString *bundle) {
     @try { bundle=[application valueForKey:@"bundleIdentifier"]; } @catch (__unused NSException *exception) {}
     // YouTube stays on its established tablet-scene path. Other enabled apps
     // use the SpringBoard external-display scene host; OFF remains native.
-    if (CTHostEnabled(bundle) && ![bundle isEqualToString:@"com.google.ios.youtube"]) {
+    if ([bundle isEqualToString:@"com.netflix.Netflix"] && CTHostEnabled(bundle)) {
         CTHostLog([NSString stringWithFormat:@"intercept enabled app=%@",bundle]);
         [[NSDistributedNotificationCenter defaultCenter] postNotificationName:CTHostLaunchNotification object:nil userInfo:@{@"bundle":bundle}];
         return nil;
