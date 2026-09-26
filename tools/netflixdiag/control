@@ -1,0 +1,9 @@
+Package: com.sushibta.netflixdiag
+Name: NetflixDiag
+Version: 0.1.0
+Architecture: iphoneos-arm64
+Description: Read-only diagnostics for Netflix display and playback errors.
+Maintainer: sushibta25-design
+Author: sushibta25-design
+Section: Tweaks
+Depends: mobilesubstrate
