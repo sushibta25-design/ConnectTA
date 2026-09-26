@@ -640,12 +640,10 @@ static void CTAlignNativeHost(id controller){
             if(![NSBundle.mainBundle.bundlePath.pathExtension isEqualToString:@"app"])return;
             gAppClient=YES;
             gYouTubeLayout=[bundle isEqualToString:@"com.google.ios.youtube"];
-            if(!gYouTubeLayout){
-                CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ external-host path; app UIKit hooks skipped",bundle);
-                return;
+            if(gYouTubeLayout){
+                %init(CTTabletIdentity);
             }
-            %init(CTTabletIdentity);
-            CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ tablet=1",bundle);
+            CTLog(@"[APPBRIDGE-CLIENT] bundle=%@ tablet=%d",bundle,gYouTubeLayout);
             CTHybridInstallAppBridge();return;
         }
         BOOL car=[bundle isEqualToString:@"com.apple.CarPlayApp"];
