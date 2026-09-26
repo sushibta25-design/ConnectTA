@@ -10,10 +10,11 @@ static NSString *const CTHostBuild=@"0.4.6-host-prototype";
 static CTExternalCarPlayWindow *gCTExternalWindow=nil;
 static NSString *gCTExternalBundle=nil;
 static int gCTHostLaunchToken=-1;
+static int gCTPreferencesToken=-1;
 
 static BOOL CTHostEnabled(NSString *bundle) { return [bundle isKindOfClass:NSString.class] && [CTReadEnabledApps() containsObject:bundle]; }
 static void CTHostLog(NSString *message) {
-    NSString *line=[NSString stringWithFormat:@"[ConnectTA-%@ pid=%d] %@\\n",CTHostBuild,NSProcessInfo.processInfo.processIdentifier,message];
+    NSString *line=[NSString stringWithFormat:@"[ConnectTA-%@ pid=%d] %@\n",CTHostBuild,NSProcessInfo.processInfo.processIdentifier,message];
     NSData *data=[line dataUsingEncoding:NSUTF8StringEncoding];
     @synchronized(NSFileManager.class) {
         NSFileHandle *file=[NSFileHandle fileHandleForWritingAtPath:@"/var/mobile/ConnectTA.txt"];
@@ -40,6 +41,20 @@ static void CTHostLaunch(NSString *bundle) {
     gCTExternalWindow=candidate;
     gCTExternalBundle=[bundle copy];
 }
+static void CTInstallSpringBoardObservers(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        notify_register_dispatch(CTHostLaunchNotification.UTF8String,&gCTHostLaunchToken,dispatch_get_main_queue(),^(__unused int changedToken) {
+            CTHostLaunch(@"com.netflix.Netflix");
+        });
+        [[NSNotificationCenter defaultCenter] addObserverForName:@"CarPlayIsConnectedDidChange" object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
+            id device=((id(*)(id,SEL))objc_msgSend)(objc_getClass("AVExternalDevice"),NSSelectorFromString(@"currentCarPlayExternalDevice"));
+            if (!device) CTHostClose();
+        }];
+        notify_register_dispatch(CTPreferencesChanged,&gCTPreferencesToken,dispatch_get_main_queue(),^(__unused int changedToken) {
+            if (gCTExternalBundle && !CTHostEnabled(gCTExternalBundle)) CTHostClose();
+        });
+    });
+}
 
 %group CTCarPlayLaunch
 %hook CARApplicationLaunchInfo
@@ -57,29 +72,10 @@ static void CTHostLaunch(NSString *bundle) {
 %end
 %end
 
-%group CTSpringBoardHost
-%hook SpringBoard
-- (void)applicationDidFinishLaunching:(id)application {
-    notify_register_dispatch(CTHostLaunchNotification.UTF8String,&gCTHostLaunchToken,dispatch_get_main_queue(),^(__unused int changedToken) {
-        CTHostLaunch(@"com.netflix.Netflix");
-    });
-    [[NSNotificationCenter defaultCenter] addObserverForName:@"CarPlayIsConnectedDidChange" object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
-        id device=((id(*)(id,SEL))objc_msgSend)(objc_getClass("AVExternalDevice"),NSSelectorFromString(@"currentCarPlayExternalDevice"));
-        if (!device) CTHostClose();
-    }];
-    int token=-1;
-    notify_register_dispatch(CTPreferencesChanged,&token,dispatch_get_main_queue(),^(__unused int changedToken) {
-        if (gCTExternalBundle && !CTHostEnabled(gCTExternalBundle)) CTHostClose();
-    });
-    %orig;
-}
-%end
-%end
-
 %ctor {
     @autoreleasepool {
         NSString *bundle=NSBundle.mainBundle.bundleIdentifier;
         if ([bundle isEqualToString:@"com.apple.CarPlayApp"]) %init(CTCarPlayLaunch);
-        else if ([bundle isEqualToString:@"com.apple.springboard"]) %init(CTSpringBoardHost);
+        else if ([bundle isEqualToString:@"com.apple.springboard"]) CTInstallSpringBoardObservers();
     }
 }
